@@ -18,8 +18,9 @@ program
   .option('-p, --path <path>', 'Path to the serial port (e.g., /dev/ttyUSB0)')
   .option('-b, --baudrate <baudrate>', 'Baud Rate', '9600')
   .option('-a, --parity <parity>', 'Parity (odd | even | none)', 'none')
-  .option('-d, --databits <databits>', 'Data Bits (1 | 1.5 | 2)', '1')
+  .option('-d, --databits <databits>', 'Data Bits (5 | 6 | 7 | 8)', '8')
   .option('-t, --stopbits <stopbits>', 'Stop Bits (1 | 1.5 | 2)', '1')
+  .option('-f, --fullscreen', 'Enable fullscreen mode', false)
   .option('-s, --scale <scale>', 'Scale', '2')
   .addHelpText('beforeAll', figlet.textSync('VT-AC', { font: 'cricket' }) + '\n' + `Version: ${VERSION} | A.C. Wright Design\n`)
   .parse(process.argv)
@@ -49,6 +50,9 @@ if (options.stopbits) {
   } else {
     console.log('Error: Invalid Stop Bits')
   }
+}
+if (options.fullscreen) {
+  vtac.fullscreen = options.fullscreen
 }
 if (options.scale) {
   vtac.scale = parseInt(options.scale)

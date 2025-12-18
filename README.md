@@ -70,6 +70,7 @@ vtac -p /dev/ttyUSB0 -s 2
 - `-d, --databits <databits>` - Data bits (default: "8")
 - `-t, --stopbits <stopbits>` - Stop bits (default: "1")
 - `-s, --scale <scale>` - Scale (default: "2")
+- `-F, --fullscreen` - Enable fullscreen mode (default: false)
 
 ## Development
 

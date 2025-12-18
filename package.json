@@ -1,0 +1,43 @@
+{
+  "name": "vtac",
+  "version": "1.0.0",
+  "description": "A fantasy ASCII terminal emulator",
+  "main": "index.js",
+  "bin": {
+    "vtac": "dist/index.js"
+  },
+  "scripts": {
+    "build": "npx tsc",
+    "start": "node ./dist/index.js"
+  },
+  "keywords": [
+    "terminal",
+    "ascii",
+    "serial",
+    "rs232",
+    "vt",
+    "vt100",
+    "vt102",
+    "binary",
+    "assembly",
+    "typescript"
+  ],
+  "author": "A.C. Wright",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/acwright/VT-AC.git"
+  },
+  "homepage": "https://github.com/acwright/VT-AC",
+  "type": "commonjs",
+  "dependencies": {
+    "@kmamal/sdl": "^0.11.13",
+    "commander": "^14.0.1",
+    "figlet": "^1.9.3",
+    "serialport": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.0",
+    "typescript": "^5.9.3"
+  }
+}

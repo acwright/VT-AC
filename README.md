@@ -48,58 +48,28 @@ npm link
 
 ### Basic Usage
 
-Convert a binary file to Wozmon format starting at address 0x0000:
+Open the terminal emulator with a path to the serial port:
 
 ```
-vtac <path-to-binary-file>
+vtac -p /dev/ttyUSB0
 ```
 
-### With Custom Starting Address
-
-Specify a custom starting address in hexadecimal:
+### With Scaling
 
 ```
-vtac -a 0x800 <path-to-binary-file>
-```
-
-or
-
-```
-vtac --address 0x800 <path-to-binary-file>
-```
-
-### Redirect Output to File
-
-```
-vtac -a 0x800 program.prg > output.txt
+vtac -p /dev/ttyUSB0 -s 2
 ```
 
 ### Command Line Options
 
 - `-v, --version` - Output the current version
 - `-h, --help` - Display help information
-- `-a, --address <address>` - Starting address in hexadecimal (default: 0x0000)
-
-## Output Format
-
-The tool outputs binary data in hexadecimal format with 16 bytes per line:
-
-```
-0800: AA BB CC DD EE 00 11 22 33 44 55 66 77 88 99 FF
-0810: 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 10
-```
-
-Each line contains:
-- 4-digit hexadecimal address
-- Colon separator
-- Up to 16 bytes in hexadecimal format, space-separated
-
-## Example
-
-```
-# Convert a 6502 program binary starting at address 0x800
-bin2woz -a 0x800 /path/to/binary/file.prg > output.txt
-```
+- `-p, --path <path>` - Path to the serial port (e.g., /dev/ttyUSB0)
+- `-b, --baudrate <baudrate>` - Baud rate (default: "9600")
+- `-a, --parity <parity>` - Parity (default: "none")
+- `-d, --databits <databits>` - Data bits (default: "8")
+- `-t, --stopbits <stopbits>` - Stop bits (default: "1")
+- `-s, --scale <scale>` - Scale (default: "2")
 
 ## Development
 
@@ -107,7 +77,7 @@ bin2woz -a 0x800 /path/to/binary/file.prg > output.txt
 
 ```
 npm run build
-node ./dist/index.js -a 0x800 <path-to-binary-file>
+node ./dist/index.js -p /dev/ttyUSB0
 ```
 
 ### Release Build

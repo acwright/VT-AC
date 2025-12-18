@@ -7,6 +7,7 @@ export class VTAC {
   path?: string
   baudRate: number = 115200
   parity: 'odd' | 'even' | 'none' = 'none'
+  dataBits: 5 | 6 | 7 | 8 | undefined = 8
   stopBits: 1 | 1.5 | 2 | undefined = 1
 
   window?: Sdl.Video.Window
@@ -20,6 +21,7 @@ export class VTAC {
         path: this.path,
         baudRate: this.baudRate,
         parity: this.parity,
+        dataBits: this.dataBits,
         stopBits: this.stopBits
       }, function (err) {
         if (err) {

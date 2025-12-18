@@ -15,9 +15,10 @@ program
   .description('A fantasy ASCII terminal emulator.')
   .version(VERSION, '-v, --version', 'Output the current version')
   .helpOption('-h, --help', 'Output help / options')
-  .option('-p, --path <path>', 'Path to the serial port (required)')
+  .option('-p, --path <path>', 'Path to the serial port (e.g., /dev/ttyUSB0)')
   .option('-b, --baudrate <baudrate>', 'Baud Rate', '9600')
   .option('-a, --parity <parity>', 'Parity (odd | even | none)', 'none')
+  .option('-d, --databits <databits>', 'Data Bits (1 | 1.5 | 2)', '1')
   .option('-t, --stopbits <stopbits>', 'Stop Bits (1 | 1.5 | 2)', '1')
   .option('-s, --scale <scale>', 'Scale', '2')
   .addHelpText('beforeAll', figlet.textSync('VT-AC', { font: 'cricket' }) + '\n' + `Version: ${VERSION} | A.C. Wright Design\n`)
@@ -32,6 +33,14 @@ if (options.baudrate) {
 }
 if (options.parity) {
   vtac.parity = options.parity
+}
+if (options.databits) {
+  const dataBits = parseInt(options.databits)
+  if (dataBits == 5 || dataBits == 6 || dataBits == 7 || dataBits == 8) {
+    vtac.dataBits = dataBits
+  } else {
+    console.log('Error: Invalid Data Bits')
+  }
 }
 if (options.stopbits) {
   const stopBits = parseInt(options.stopbits)

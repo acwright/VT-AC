@@ -14,7 +14,27 @@ export class VTAC {
   scale: number = 2
   fullscreen: boolean = false
 
-  buffer: Buffer<ArrayBuffer> = Buffer.alloc(320 * 240 * 3)
+  buffer: Buffer<ArrayBuffer> = Buffer.alloc(320 * 240 * 3).fill(0x00)
+
+  mode: 'text' | 'graphics' = 'text'
+
+  cursorX: number = 0
+  cursorY: number = 0
+  cursorChar: number = 0x20 // Space
+  cursorBlinking: boolean = true
+  cursorCharNextByte: boolean = false
+  cursorXNextByte: boolean = false
+  cursorYNextByte: boolean = false
+
+  pixelX: number = 0
+  pixelY: number = 0
+  pixelXNextByte: boolean = false
+  pixelYNextByte: boolean = false
+
+  characterNextByte: boolean = false
+
+  fontAttributesNextByte: boolean = false
+  fontColorNextByte: boolean = false
 
   launch = () => {
     if (this.path) { 
@@ -52,17 +72,177 @@ export class VTAC {
   }
 
   update = (data: number) => {
-    console.log(data)
-
-    // Just generate some random pixels when input occurs for now...
-    let offset = 0
-    for (let i = 0; i < 240; i++) {
-      for (let j = 0; j < 320; j++) {
-        this.buffer[offset++] = Math.floor(Math.random() * 255)    // R
-        this.buffer[offset++] = Math.floor(Math.random() * 255)    // G
-        this.buffer[offset++] = Math.floor(Math.random() * 255)    // B
-      }
+    if (this.cursorCharNextByte) {
+      this.cursorChar = data
+      this.cursorCharNextByte = false
+      // TODO: Update screen with new cursor character
+      return
     }
+    if (this.cursorXNextByte) {
+      this.cursorX = data % 40 // 0 to 39
+      this.cursorXNextByte = false
+      // TODO: Update screen with new cursor position
+      return
+    }
+    if (this.cursorYNextByte) {
+      this.cursorY = data % 30 // 0 to 29
+      this.cursorYNextByte = false
+      // TODO: Update screen with new cursor position
+      return
+    }
+
+    if (this.pixelXNextByte) {
+      this.pixelX = data % 160 // 0 to 159
+      this.pixelXNextByte = false
+      return
+    }
+    if (this.pixelYNextByte) {
+      this.pixelY = data % 60 // 0 to 59
+      this.pixelYNextByte = false
+      return
+    }
+
+    if (this.fontAttributesNextByte) {
+      // TODO: Handle set font attributes
+      this.fontAttributesNextByte = false
+      return
+    }
+    if (this.fontColorNextByte) {
+      // TODO: Handle set font color
+      this.fontColorNextByte = false
+      return
+    }
+
+    if (this.characterNextByte) {
+      // TODO: Handle character byte
+      this.characterNextByte = false
+      return
+    }
+
+    switch(true) {
+      case (data == 0x00): // NULL
+        break
+      case (data == 0x01): // CURSOR HOME
+        this.cursorX = 0
+        this.cursorY = 0
+        // TODO: Update screen with new cursor position
+        break
+      case (data == 0x02): // CURSOR CHARACTER
+        this.cursorCharNextByte = true
+        break
+      case (data == 0x03): // CURSOR BLINKING
+        this.cursorBlinking = true
+        // TODO: Update screen with new cursor animation
+        break
+      case (data == 0x04): // CURSOR SOLID
+        this.cursorBlinking = false
+         // TODO: Update screen with new cursor animation
+        break
+      case (data == 0x05): // SET GRAPHICS COLUMN
+        this.pixelXNextByte = true
+        break
+      case (data == 0x06): // SET GRAPHICS ROW
+        this.pixelYNextByte = true
+        break
+      case (data == 0x07): // BELL
+        // TODO: Play bell sound
+        break
+      case (data == 0x08): // BACKSPACE
+        // TODO: Handle backpsace
+        break
+      case (data == 0x09): // TAB
+        // TODO: Handle tab
+        break
+      case (data == 0x0A): // LINE FEED
+        // TODO: Handle line feed
+        break
+      case (data == 0x0B): // SCREEN MODE
+        this.mode == 'text' ? this.mode = 'graphics' : this.mode = 'text'
+        break
+      case (data == 0x0C): // CLEAR SCREEN
+        // TODO: Handle clear screen
+        break
+      case (data == 0x0D): // CARRIAGE RETURN
+        // TODO: Handle carriage return
+        break
+      case (data == 0x0E): // SET TEXT COLUMN
+        this.cursorXNextByte = true
+        break
+      case (data == 0x0F): // SET TEXT ROW
+        this.cursorYNextByte = true
+        break
+      case (data == 0x10): // DELETE TO START OF LINE
+        // TODO: Handle delete to start of line
+        break
+      case (data == 0x11): // DELETE TO END OF LINE
+        // TODO: Handle delete to end of line
+        break
+      case (data == 0x12): // DELETE TO START OF SCREEN
+        // TODO: Handle delete to start of screen
+        break
+      case (data == 0x13): // DELETE TO END OF SCREEN
+        // TODO: Handle delete to end of screen
+        break
+      case (data == 0x14): // SCROLL LEFT
+        // TODO: Handle scroll left
+        break
+      case (data == 0x15): // SCROLL RIGHT
+        // TODO: Handle scroll right
+        break
+      case (data == 0x16): // SCROLL UP
+        // TODO: Handle scroll up
+        break
+      case (data == 0x17): // SCROLL DOWN
+        // TODO: Handle scroll down
+        break
+      case (data == 0x18): // SET FONT ATTRIBUTES
+        this.fontAttributesNextByte = true
+        break
+      case (data == 0x19): // SET FONT COLOR
+        this.fontColorNextByte = true
+        break
+      case (data == 0x1A): // NEXT BYTE AS CHARACTER
+        this.characterNextByte = true
+        break
+      case (data == 0x1B): // ESCAPE
+        // Reserved for future ANSI escape code handling
+        break
+      case (data == 0x1C): // CURSOR LEFT
+        // TODO: Handle cursor left
+        break
+      case (data == 0x1D): // CURSOR RIGHT
+        // TODO: Handle cursor right
+        break
+      case (data == 0x1E): // CURSOR UP
+        // TODO: Handle cursor up
+        break
+      case (data == 0x1F): // CURSOR DOWN
+        // TODO: Handle cursor down
+        break
+      case (data >= 0x20 && data <= 0x7E): // ASCII CHARACTERS
+        // TODO: Handle ASCII characters
+        break
+      case (data == 0x7F): // DELETE
+        // TODO: Handle delete
+        break
+      case (data >= 0x20 && data <= 0x7E): // EXTENDED CHARACTERS
+        // TODO: Handle extended characters
+        break
+      default:
+        break
+    }
+
+    // console.log(data)
+
+    // // Just generate some random pixels when input occurs for now...
+    // let offset = 0
+    // for (let i = 0; i < 240; i++) {
+    //   for (let j = 0; j < 320; j++) {
+    //     this.buffer[offset++] = Math.floor(Math.random() * 255)    // R
+    //     this.buffer[offset++] = Math.floor(Math.random() * 255)    // G
+    //     this.buffer[offset++] = Math.floor(Math.random() * 255)    // B
+    //   }
+    // }
   }
 
   render = () => {

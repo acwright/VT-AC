@@ -5,7 +5,7 @@ export class VTAC {
 
   port?: SerialPort
   path?: string
-  baudRate: number = 115200
+  baudRate: number = 9600
   parity: 'odd' | 'even' | 'none' = 'none'
   dataBits: 5 | 6 | 7 | 8 | undefined = 8
   stopBits: 1 | 1.5 | 2 | undefined = 1

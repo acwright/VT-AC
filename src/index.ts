@@ -2,6 +2,7 @@
 
 import figlet from 'figlet'
 import { Command } from 'commander'
+import { readFileSync } from 'fs'
 import { VTAC } from './VTAC/VTAC'
 
 const VERSION = '1.0.0'
@@ -22,6 +23,7 @@ program
   .option('-t, --stopbits <stopbits>', 'Stop Bits (1 | 1.5 | 2)', '1')
   .option('-f, --fullscreen', 'Enable fullscreen mode', false)
   .option('-s, --scale <scale>', 'Scale', '2')
+  .option('-l, --load <load>', 'Path to data file to load (e.g. /path/to/data.bin)')
   .addHelpText('beforeAll', figlet.textSync('VT-AC', { font: 'cricket' }) + '\n' + `Version: ${VERSION} | A.C. Wright Design\n`)
   .parse(process.argv)
 
@@ -56,6 +58,16 @@ if (options.fullscreen) {
 }
 if (options.scale) {
   vtac.scale = parseInt(options.scale)
+}
+if (options.load) {
+  try {
+    const data = readFileSync(options.load)
+    for (let i = 0; i < data.length; i++) {
+      vtac.parse(data[i])
+    }
+  } catch (err) {
+    console.log('Error loading file:', err)
+  }
 }
 
 vtac.launch()

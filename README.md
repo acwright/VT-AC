@@ -69,8 +69,9 @@ vtac -p /dev/ttyUSB0 -s 2
 - `-a, --parity <parity>` - Parity (default: "none")
 - `-d, --databits <databits>` - Data bits (default: "8")
 - `-t, --stopbits <stopbits>` - Stop bits (default: "1")
+- `-f, --fullscreen` - Enable fullscreen mode (default: false)
 - `-s, --scale <scale>` - Scale (default: "2")
-- `-F, --fullscreen` - Enable fullscreen mode (default: false)
+- `-l, --load <load>` - Path to data file to load (e.g. /path/to/data.bin)
 
 ## Development
 

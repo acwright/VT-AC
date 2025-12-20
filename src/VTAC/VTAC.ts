@@ -82,10 +82,6 @@ export class VTAC {
       }
     })
 
-    this.parse(0x02)
-    this.parse(0x20)
-    this.parse(0x03)
-
     // Start the render loop
     this.render()
   }

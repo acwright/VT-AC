@@ -42,11 +42,11 @@ vtac -p /dev/ttyUSB0
 
 ## Character Set
 
-![Character Set](https://github.com/susam/pcface/blob/main/out/oldschool-bios-8x8/preview-16x16.png?raw=true)
+![Character Set](https://github.com/acwright/VT-AC/blob/main/images/characters.png?raw=true)
 
 ## Instruction Set
 
-The VT-AC terminal supports a simple instruction set using standard ASCII characters to control its behavior. Below is a summary of the supported instructions:
+The VT-AC terminal supports a simple instruction set using standard ASCII values to control its behavior. Below is a summary of the supported instructions:
 
 | Instruction | # of Bytes | Command          | Description                                                                         |
 |-------------|------------|------------------|-------------------------------------------------------------------------------------|

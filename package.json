@@ -1,5 +1,5 @@
 {
-  "name": "vt-ac",
+  "name": "vtac-terminal",
   "version": "1.0.0",
   "description": "A fantasy ASCII terminal emulator",
   "main": "index.js",

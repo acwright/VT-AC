@@ -31,7 +31,7 @@ A fantasy ASCII terminal emulator.
 ## Quick Start
 1. Install VT-AC globally via NPM:
 ```
-npm install -g vtac
+npm install -g vt-ac
 ```
 2. Connect a serial device (e.g., Arduino) to your computer.
 3. Open VT-AC terminal emulator with the appropriate path to the serial port:
@@ -120,7 +120,7 @@ In graphics mode, in order to send pixel data with ASCII values from 0 (`$00`) t
 ### From NPM
 
 ```
-npm install -g vtac
+npm install -g vt-ac
 ```
 
 ### From Source

@@ -1,5 +1,5 @@
 {
-  "name": "vtac",
+  "name": "vt-ac",
   "version": "1.0.0",
   "description": "A fantasy ASCII terminal emulator",
   "main": "index.js",
@@ -14,10 +14,12 @@
     "terminal",
     "ascii",
     "serial",
+    "8-bit",
+    "pixel art",
     "rs232",
     "vt",
-    "vt100",
-    "vt102",
+    "vt-100",
+    "vt-102",
     "binary",
     "assembly",
     "typescript"

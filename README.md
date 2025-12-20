@@ -42,7 +42,11 @@ vtac -p /dev/ttyUSB0
 
 ## Character Set
 
-![Character Set](https://github.com/acwright/VT-AC/blob/main/images/characters.png?raw=true)
+![VT-AC Character Set](https://github.com/acwright/VT-AC/blob/main/images/characters.png?raw=true)
+
+## Palette
+
+![VT-AC Palette](https://github.com/acwright/VT-AC/blob/main/images/palette.png?raw=true)
 
 ## Instruction Set
 
@@ -165,6 +169,8 @@ vtac -p /dev/ttyUSB0 -s 4
 ```
 
 ### Load Data File
+
+VT-AC can load binary data files directly into the terminal before launch for parsing and display:
 
 ```
 vtac -l /path/to/data.bin

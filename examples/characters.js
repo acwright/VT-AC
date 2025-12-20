@@ -1,20 +1,20 @@
 // Node.js script to generate a binary file displaying all 255 characters in VT-AC terminal
-import { writeFileSync } from 'fs';
+const { writeFileSync } = require('fs');
 
 // VT-AC expects bytes 0-31 and 127 as commands, so use Data Next (0x1A) before them
 // We'll display characters in a 16x16 grid, centered on a 40x30 display
 const GRID_COLS = 16;
 const GRID_ROWS = 16;
-const TOTAL_CHARS = 256; // 16x16 grid
 const DISPLAY_COLS = 40;
 const DISPLAY_ROWS = 30;
-const DATA_NEXT = 0x1A;
-const SET_ROW = 0x0F;
-const SET_COL = 0x0E;
-const CLEAR_SCREEN = 0x0C;
+
 const HOME = 0x01;
+const CLEAR_SCREEN = 0x0C;
+const SET_COL = 0x0E;
+const SET_ROW = 0x0F;
 const FG_COLOR = 0x18;
 const BG_COLOR = 0x19;
+const DATA_NEXT = 0x1A;
 
 let bytes = [];
 

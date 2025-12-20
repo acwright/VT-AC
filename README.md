@@ -64,8 +64,8 @@ The VT-AC terminal supports a simple instruction set using standard ASCII charac
 | `0x0B`      |      1     | Screen Mode      | Toggle screen mode between text/graphics modes (Default=text)                       |
 | `0x0C`      |      1     | Clear Screen     | Clear the screen                                                                    |
 | `0x0D`      |      1     | CR               | Carriage return (move cursor to start of line)                                      |
-| `0x0E`      |      2     | Set Column       | 2nd byte is column 0 to 39 (Default=`$00`)                                          |
-| `0x0F`      |      2     | Set Row          | 2nd byte is row 0 to 29 (Default=`$00`)                                             |
+| `0x0E`      |      2     | Set Column       | 2nd byte is column 0 (`$00`) to 39 (`$27`) (Default=`$00`)                          |
+| `0x0F`      |      2     | Set Row          | 2nd byte is row 0 (`$00`) to 29 (`$1D`) (Default=`$00`)                             |
 | `0x10`      |      1     | Delete to SoL    | Delete to start of line                                                             |
 | `0x11`      |      1     | Delete to EoL    | Delete to end of line                                                               |
 | `0x12`      |      1     | Delete to SoS    | Delete to start of screen                                                           |
@@ -74,9 +74,9 @@ The VT-AC terminal supports a simple instruction set using standard ASCII charac
 | `0x15`      |      1     | Scroll Right     | Scroll screen to the right replacing vacated columns with spaces                    |
 | `0x16`      |      1     | Scroll Up        | Scroll screen up replacing vacated rows with blank lines                            |
 | `0x17`      |      1     | Scroll Down      | Scroll screen down replacing vacated rows with blank lines                          |
-| `0x18`      |      2     | Foreground Color | 2nd byte is foreground color 0 to 255 (Default=`$FF`)                               |
-| `0x19`      |      2     | Background Color | 2nd byte is background color 0 to 255 (Default=`$00`)                               |
-| `0x1A`      |      2     | Data Next        | 2nd byte as data - Allows for 0 to 31, 127 to be interpreted as data not command    |
+| `0x18`      |      2     | Foreground Color | 2nd byte is foreground color 0 (`$00`) to 255 (`$FF`) (Default=`$FF`)               |
+| `0x19`      |      2     | Background Color | 2nd byte is background color 0 (`$00`) to 255 (`$FF`) (Default=`$00`)               |
+| `0x1A`      |      2     | Data Next        | 2nd byte data not command - Allows 0 (`$00`) to 31 (`$1F`), and 127 (`$7F`) as data |
 | `0x1B`      |      1     | ESC              | Reserved for future escape code implementation                                      |
 | `0x1C`      |      1     | Cursor Left      | Move the cursor to the left                                                         |
 | `0x1D`      |      1     | Cursor Right     | Move the cursor to the right                                                        |

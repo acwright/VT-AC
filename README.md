@@ -28,6 +28,8 @@ A fantasy ASCII terminal emulator.
 - Fullscreen mode for immersive terminal experience.
 - Adjustable scaling for better visibility.
 
+- ![VT-AC Demo](https://github.com/acwright/VT-AC/blob/main/images/VT-AC.gif?raw=true)
+
 ## Quick Start
 1. Install VT-AC globally via NPM:
 ```

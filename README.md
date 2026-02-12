@@ -61,8 +61,8 @@ The VT-AC terminal supports a simple instruction set using standard ASCII values
 | `0x02`      |      2     | Cursor Character | 2nd byte is character to use, or `$00` to turn off (Default=`$00`)                  |
 | `0x03`      |      1     | Cursor Mode      | Toggle cursor mode between solid/blinking (Default=solid)                           |
 | `0x04`      |      1     | Reset            | Reset terminal (text mode, clear screen, cursor home-off-solid, bg=`$00`, fg=`$FF`) |
-| `0x05`      |      1     | N/A              | Reserved for future use                                                             |
-| `0x06`      |      1     | N/A              | Reserved for future use                                                             |
+| `0x05`      |      2     | Bell Duration    | 2nd byte is bell duration in jiffies (i.e., 1/60th of a second) (Default=`$3C`)     |
+| `0x06`      |      2     | Bell Frequency   | 2nd byte is bell frequency (Default=`$3D`)                                          |
 | `0x07`      |      1     | BELL             | Play bell sound                                                                     |
 | `0x08`      |      1     | BS               | Backspace                                                                           |
 | `0x09`      |      1     | TAB              | Move cursor to next tab stop                                                        |
@@ -116,6 +116,85 @@ In this way, the cursor can be positioned and then a continuous stream of bytes 
 Each byte that is sent can be individually colored using the foreground and background colors, enabling the creation of simple graphics and images.
 
 In graphics mode, in order to send pixel data with ASCII values from 0 (`$00`) to 31 (``$1F``) or 127 (`$7F`), the "Data Next" instruction must first be sent to indicate that the next byte should be treated as pixel data rather than a command.
+
+## Bell
+
+The terminal includes a bell feature that can be triggered using the BELL instruction. The duration and frequency of the bell sound can be configured using the Bell Duration and Bell Frequency instructions, allowing for customizable audio feedback.
+
+### How It Works
+
+The bell system uses real-time audio synthesis to generate pure sine wave tones at specific frequencies. When a BELL command is received:
+
+1. The current `bellFrequency` and `bellDuration` settings are captured and added to a playback queue
+2. If no bell is currently playing, playback begins immediately
+3. Bell sounds are played sequentially - each tone completes before the next begins
+4. The audio device remains open while processing queued requests for optimal performance
+
+This queue-based approach ensures that rapid sequences of bell commands (like playing musical scales) are handled smoothly without overlap or dropped notes.
+
+### Configuration
+
+**Bell Duration** (`0x05`): Sets the length of the bell tone in jiffies (1/60th of a second)
+- Default: `$3C` (60 jiffies = 1 second)
+- Range: `$01` to `$FF` (0.017 seconds to 4.25 seconds)
+- Example: `$0F` (15 jiffies = 0.25 seconds)
+
+**Bell Frequency** (`0x06`): Sets the musical note to play using hex values from the frequency table below
+- Default: `$3D` (C6 = 1046.50 Hz)
+- Range: `$01` to `$54` (C1 to B7)
+- Example: `$2E` (A4 = 440 Hz - standard concert pitch)
+
+**Bell** (`0x07`): Triggers playback with the current duration and frequency settings
+
+### Usage Example
+
+To play middle C (C4) for half a second:
+```
+0x05 0x1E  // Set duration to 30 jiffies (0.5 seconds)
+0x06 0x25  // Set frequency to C4 (261.63 Hz)
+0x07       // Play the bell
+```
+
+To play a simple ascending scale:
+```
+0x05 0x0F  // Set duration to quarter second
+0x06 0x25  // C4
+0x07       // Play
+0x06 0x27  // D4
+0x07       // Play
+0x06 0x29  // E4
+0x07       // Play
+```
+
+### Note Frequencies
+
+| Note | Hex    | Frequency (Hz) | Note | Hex    | Frequency (Hz) | Note | Hex    | Frequency (Hz) |
+|------|--------|----------------|------|--------|----------------|------|--------|----------------|
+| C1   | `$01`  | 32.70          | C2   | `$0D`  | 65.41          | C3   | `$19`  | 130.81         |
+| C#1  | `$02`  | 34.65          | C#2  | `$0E`  | 69.30          | C#3  | `$1A`  | 138.59         |
+| D1   | `$03`  | 36.71          | D2   | `$0F`  | 73.42          | D3   | `$1B`  | 146.83         |
+| D#1  | `$04`  | 38.89          | D#2  | `$10`  | 77.78          | D#3  | `$1C`  | 155.56         |
+| E1   | `$05`  | 41.20          | E2   | `$11`  | 82.41          | E3   | `$1D`  | 164.81         |
+| F1   | `$06`  | 43.65          | F2   | `$12`  | 87.31          | F3   | `$1E`  | 174.61         |
+| F#1  | `$07`  | 46.25          | F#2  | `$13`  | 92.50          | F#3  | `$1F`  | 185.00         |
+| G1   | `$08`  | 49.00          | G2   | `$14`  | 98.00          | G3   | `$20`  | 196.00         |
+| G#1  | `$09`  | 51.91          | G#2  | `$15`  | 103.83         | G#3  | `$21`  | 207.65         |
+| A1   | `$0A`  | 55.00          | A2   | `$16`  | 110.00         | A3   | `$22`  | 220.00         |
+| A#1  | `$0B`  | 58.27          | A#2  | `$17`  | 116.54         | A#3  | `$23`  | 233.08         |
+| B1   | `$0C`  | 61.74          | B2   | `$18`  | 123.47         | B3   | `$24`  | 246.94         |
+|------|--------|----------------|------|--------|----------------|------|--------|----------------|
+| C4   | `$25`  | 261.63         | C5   | `$31`  | 523.25         | C6   | `$3D`  | 1046.50        |
+| C#4  | `$26`  | 277.18         | C#5  | `$32`  | 554.37         | C#6  | `$3E`  | 1108.73        |
+| D4   | `$27`  | 293.66         | D5   | `$33`  | 587.33         | D6   | `$3F`  | 1174.66        |
+| D#4  | `$28`  | 311.13         | D#5  | `$34`  | 622.25         | D#6  | `$40`  | 1244.51        |
+| E4   | `$29`  | 329.63         | E5   | `$35`  | 659.25         | E6   | `$41`  | 1318.51        |
+| F4   | `$2A`  | 349.23         | F5   | `$36`  | 698.46         | F6   | `$42`  | 1396.91        |
+| F#4  | `$2B`  | 369.99         | F#5  | `$37`  | 739.99         | F#6  | `$43`  | 1479.98        |
+| G4   | `$2C`  | 392.00         | G5   | `$38`  | 783.99         | G6   | `$44`  | 1567.98        |
+| G#4  | `$2D`  | 415.30         | G#5  | `$39`  | 830.61         | G#6  | `$45`  | 1661.22        |
+| A4   | `$2E`  | 440.00         | A5   | `$3A`  | 880.00         | A6   | `$46`  | 1760.00        |
+| A#4  | `$2F`  | 466.16         | A#5  | `$3B`  | 932.33         | A#6  | `$47`  | 1864.66        |
+| B4   | `$30`  | 493.88         | B5   | `$3C`  | 987.77         | B6   | `$48`  | 1975.53        |
 
 ## Installation
 

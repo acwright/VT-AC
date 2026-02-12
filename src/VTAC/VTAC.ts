@@ -36,6 +36,14 @@ export class VTAC {
   cursorVisible: boolean = true
   cursorBlinkInterval: number = 500 // Blink every 500ms (twice per second)
 
+  bellDuration: number = 0x3C // Duration in jiffies (1/60th of a second) (Default: 1 second)
+  bellFrequency: number = 0x3D // Frequency value (Default: C6)
+  bellDurationNextByte: boolean = false
+  bellFrequencyNextByte: boolean = false
+  bellQueue: Array<{ frequency: number, duration: number }> = []
+  isBellPlaying: boolean = false
+  bellAudioDevice?: any = undefined
+
   dataNextByte: boolean = false
 
   foregroundColor: number = 0xFF // White
@@ -50,7 +58,7 @@ export class VTAC {
   // MAIN
   //
 
-  launch = () => {
+  begin = () => {
     if (this.path) {
       this.port = new SerialPort({
         path: this.path,
@@ -155,16 +163,127 @@ export class VTAC {
     this.cursorMode = 'solid'
     this.backgroundColor = 0x00
     this.foregroundColor = 0xFF
+    this.bellDuration = 0x3C
+    this.bellFrequency = 0x3D
+    this.bellQueue = []
+    this.isBellPlaying = false
+    // Close audio device if open
+    if (this.bellAudioDevice) {
+      this.bellAudioDevice.clearQueue()
+      this.bellAudioDevice.close()
+      this.bellAudioDevice = undefined
+    }
     this.columnNextByte = false
     this.rowNextByte = false
     this.cursorCharNextByte = false
     this.foregroundColorNextByte = false
     this.backgroundColorNextByte = false
+    this.bellDurationNextByte = false
+    this.bellFrequencyNextByte = false
     this.buffer.fill(0x00)
   }
 
   bell = () => {
-    process.stdout.write('\u0007')
+    // Get frequency from lookup table, default to 0 Hz if not found
+    const frequency = VTAC.NOTE_FREQUENCIES[this.bellFrequency] || 0
+    
+    // Skip if frequency is 0 or duration is 0
+    if (frequency === 0 || this.bellDuration === 0) {
+      return
+    }
+    
+    // Add bell request to queue
+    this.bellQueue.push({
+      frequency: frequency,
+      duration: this.bellDuration
+    })
+    
+    // Start processing queue if not already playing
+    if (!this.isBellPlaying) {
+      this.processBellQueue()
+    }
+  }
+
+  processBellQueue = () => {
+    // If queue is empty, stop processing and close audio device
+    if (this.bellQueue.length === 0) {
+      this.isBellPlaying = false
+      if (this.bellAudioDevice) {
+        this.bellAudioDevice.clearQueue()
+        this.bellAudioDevice.pause()
+        this.bellAudioDevice.close()
+        this.bellAudioDevice = undefined
+      }
+      return
+    }
+    
+    // Mark as playing
+    this.isBellPlaying = true
+    
+    // Open audio device if not already open
+    if (!this.bellAudioDevice) {
+      const sampleRate = 44100
+      this.bellAudioDevice = sdl.audio.openDevice(
+        { type: 'playback' },
+        {
+          channels: 1,
+          frequency: sampleRate,
+          format: 'f32',
+          buffered: 4096 // Buffer size must be power of 2
+        }
+      )
+      
+      if (!this.bellAudioDevice) {
+        // Fallback to console beep if audio device cannot be opened
+        process.stdout.write('\u0007')
+        // Clear queue and stop
+        this.bellQueue = []
+        this.isBellPlaying = false
+        return
+      }
+      
+      // Start playback
+      this.bellAudioDevice.play()
+    }
+    
+    // Get next bell request from queue
+    const bellRequest = this.bellQueue.shift()
+    if (!bellRequest) {
+      this.processBellQueue() // Check if queue is empty
+      return
+    }
+    
+    const { frequency, duration } = bellRequest
+    
+    // Convert jiffies (1/60th of a second) to milliseconds
+    const durationMs = (duration / 60) * 1000
+    
+    // Generate sine wave samples
+    const sampleRate = 44100
+    const numSamples = Math.floor((durationMs / 1000) * sampleRate)
+    const samples = new Float32Array(numSamples)
+    
+    for (let i = 0; i < numSamples; i++) {
+      // Generate sine wave: amplitude * sin(2π * frequency * time)
+      const time = i / sampleRate
+      const amplitude = 0.2 // Keep volume at 20% to avoid distortion
+      samples[i] = amplitude * Math.sin(2 * Math.PI * frequency * time)
+      
+      // Apply fade out in the last 10% to avoid clicks
+      const fadeStartSample = numSamples * 0.9
+      if (i > fadeStartSample) {
+        const fadeProgress = (i - fadeStartSample) / (numSamples - fadeStartSample)
+        samples[i] *= (1 - fadeProgress)
+      }
+    }
+    
+    // Enqueue the audio samples
+    this.bellAudioDevice.enqueue(Buffer.from(samples.buffer))
+    
+    // Process next bell in queue after this one finishes
+    setTimeout(() => {
+      this.processBellQueue()
+    }, durationMs)
   }
 
   backspace = () => {
@@ -455,6 +574,17 @@ export class VTAC {
       return
     }
 
+    if (this.bellDurationNextByte) {
+      this.bellDuration = data
+      this.bellDurationNextByte = false
+      return
+    }
+    if (this.bellFrequencyNextByte) {
+      this.bellFrequency = data
+      this.bellFrequencyNextByte = false
+      return
+    }
+
     if (this.foregroundColorNextByte) {
       this.foregroundColor = data
       this.foregroundColorNextByte = false
@@ -489,11 +619,11 @@ export class VTAC {
       case (data == 0x04): // RESET
         this.reset()
         break
-      case (data == 0x05): // RESERVED
-        // Reserved for future use
+      case (data == 0x05): // BELL DURATION
+        this.bellDurationNextByte = true
         break
-      case (data == 0x06): // RESERVED
-        // Reserved for future use
+      case (data == 0x06): // BELL FREQUENCY
+        this.bellFrequencyNextByte = true
         break
       case (data == 0x07): // BELL
         this.bell()
@@ -924,6 +1054,94 @@ export class VTAC {
       default:
         break
     }
+  }
+
+  // Note frequency lookup table (hex values $01-$54 mapped to Hz)
+  static NOTE_FREQUENCIES: { [key: number]: number } = {
+    0x01: 32.70,   // C1
+    0x02: 34.65,   // C#1
+    0x03: 36.71,   // D1
+    0x04: 38.89,   // D#1
+    0x05: 41.20,   // E1
+    0x06: 43.65,   // F1
+    0x07: 46.25,   // F#1
+    0x08: 49.00,   // G1
+    0x09: 51.91,   // G#1
+    0x0A: 55.00,   // A1
+    0x0B: 58.27,   // A#1
+    0x0C: 61.74,   // B1
+    0x0D: 65.41,   // C2
+    0x0E: 69.30,   // C#2
+    0x0F: 73.42,   // D2
+    0x10: 77.78,   // D#2
+    0x11: 82.41,   // E2
+    0x12: 87.31,   // F2
+    0x13: 92.50,   // F#2
+    0x14: 98.00,   // G2
+    0x15: 103.83,  // G#2
+    0x16: 110.00,  // A2
+    0x17: 116.54,  // A#2
+    0x18: 123.47,  // B2
+    0x19: 130.81,  // C3
+    0x1A: 138.59,  // C#3
+    0x1B: 146.83,  // D3
+    0x1C: 155.56,  // D#3
+    0x1D: 164.81,  // E3
+    0x1E: 174.61,  // F3
+    0x1F: 185.00,  // F#3
+    0x20: 196.00,  // G3
+    0x21: 207.65,  // G#3
+    0x22: 220.00,  // A3
+    0x23: 233.08,  // A#3
+    0x24: 246.94,  // B3
+    0x25: 261.63,  // C4
+    0x26: 277.18,  // C#4
+    0x27: 293.66,  // D4
+    0x28: 311.13,  // D#4
+    0x29: 329.63,  // E4
+    0x2A: 349.23,  // F4
+    0x2B: 369.99,  // F#4
+    0x2C: 392.00,  // G4
+    0x2D: 415.30,  // G#4
+    0x2E: 440.00,  // A4
+    0x2F: 466.16,  // A#4
+    0x30: 493.88,  // B4
+    0x31: 523.25,  // C5
+    0x32: 554.37,  // C#5
+    0x33: 587.33,  // D5
+    0x34: 622.25,  // D#5
+    0x35: 659.25,  // E5
+    0x36: 698.46,  // F5
+    0x37: 739.99,  // F#5
+    0x38: 783.99,  // G5
+    0x39: 830.61,  // G#5
+    0x3A: 880.00,  // A5
+    0x3B: 932.33,  // A#5
+    0x3C: 987.77,  // B5
+    0x3D: 1046.50, // C6
+    0x3E: 1108.73, // C#6
+    0x3F: 1174.66, // D6
+    0x40: 1244.51, // D#6
+    0x41: 1318.51, // E6
+    0x42: 1396.91, // F6
+    0x43: 1479.98, // F#6
+    0x44: 1567.98, // G6
+    0x45: 1661.22, // G#6
+    0x46: 1760.00, // A6
+    0x47: 1864.66, // A#6
+    0x48: 1975.53, // B6
+    0x49: 2093.00, // C7
+    0x4A: 2217.46, // C#7
+    0x4B: 2349.32, // D7
+    0x4C: 2489.02, // D#7
+    0x4D: 2637.02, // E7
+    0x4E: 2793.83, // F7
+    0x4F: 2959.96, // F#7
+    0x50: 3135.96, // G7
+    0x51: 3322.44, // G#7
+    0x52: 3520.00, // A7
+    0x53: 3729.31, // A#7
+    0x54: 3951.07  // B7
   }
 
   static CHARACTERS = [

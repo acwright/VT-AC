@@ -432,16 +432,7 @@ export class VTAC {
   }
 
   delete = () => {
-    const startRow = this.row * 8
-    const startColumn = this.column * 8
-    
-    // Clear 8x8 pixel block with background color
-    for (let y = 0; y < 8; y++) {
-      const bufferRowStart = (startRow + y) * VTAC.WIDTH
-      for (let x = 0; x < 8; x++) {
-        this.buffer[bufferRowStart + startColumn + x] = this.backgroundColor
-      }
-    }
+    this.clearCharacterCell(this.column, this.row)
   }
 
   data = (data: number) => {

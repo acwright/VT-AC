@@ -5,7 +5,7 @@ import { Command } from 'commander'
 import { readFileSync } from 'fs'
 import { VTAC } from './VTAC/VTAC'
 
-const VERSION = '1.1.0'
+const VERSION = '1.1.1'
 
 const vtac = new VTAC()
 

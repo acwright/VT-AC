@@ -474,6 +474,7 @@ export class VTAC {
       this.row++
       if (this.row >= VTAC.ROWS) {
         this.row = VTAC.ROWS - 1
+        this.scroll('up')
       }
     }
     this.offset = 0

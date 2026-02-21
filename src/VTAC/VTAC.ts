@@ -1,23 +1,9 @@
-import sdl, { Sdl } from '@kmamal/sdl'
-import { SerialPort } from 'serialport'
-
 export class VTAC {
 
   static COLUMNS: number = 40
   static ROWS: number = 30
   static WIDTH: number = VTAC.COLUMNS * 8
   static HEIGHT: number = VTAC.ROWS * 8
-
-  port?: SerialPort
-  path?: string
-  baudRate: number = 9600
-  parity: 'odd' | 'even' | 'none' = 'none'
-  dataBits: 5 | 6 | 7 | 8 | undefined = 8
-  stopBits: 1 | 1.5 | 2 | undefined = 1
-
-  window?: Sdl.Video.Window
-  scale: number = 2
-  fullscreen: boolean = false
 
   buffer: Buffer<ArrayBuffer> = Buffer.alloc(VTAC.WIDTH * VTAC.HEIGHT).fill(0x00)
 
@@ -32,17 +18,12 @@ export class VTAC {
   cursorChar: number = 0x00 // OFF
   cursorMode: 'solid' | 'blinking' = 'solid'
   cursorCharNextByte: boolean = false
-  cursorBlinkTime: number = 0
-  cursorVisible: boolean = true
-  cursorBlinkInterval: number = 500 // Blink every 500ms (twice per second)
 
   bellDuration: number = 0x3C // Duration in jiffies (1/60th of a second) (Default: 1 second)
   bellFrequency: number = 0x3D // Frequency value (Default: C6)
   bellDurationNextByte: boolean = false
   bellFrequencyNextByte: boolean = false
   bellQueue: Array<{ frequency: number, duration: number }> = []
-  isBellPlaying: boolean = false
-  bellAudioDevice?: any = undefined
 
   dataNextByte: boolean = false
 
@@ -50,105 +31,6 @@ export class VTAC {
   backgroundColor: number = 0x00 // Black
   foregroundColorNextByte: boolean = false
   backgroundColorNextByte: boolean = false
-
-  lastRenderTime: number = 0
-  targetFrameTime: number = 1000 / 60 // 60fps = ~16.67ms per frame
-
-  //
-  // MAIN
-  //
-
-  begin = () => {
-    if (this.path) {
-      this.port = new SerialPort({
-        path: this.path,
-        baudRate: this.baudRate,
-        parity: this.parity,
-        dataBits: this.dataBits,
-        stopBits: this.stopBits
-      }, (err) => {
-        if (err) {
-          console.log('Error: ', err.message)
-        }
-      })
-
-      this.port.on('data', this.receive)
-    }
-
-    this.window = sdl.video.createWindow({
-      title: "VT-AC",
-      width: VTAC.WIDTH * this.scale,
-      height: VTAC.HEIGHT * this.scale,
-      fullscreen: this.fullscreen,
-      resizable: false
-    })
-    this.window.on('keyDown', this.onKey)
-    this.window.on('textInput', this.onText)
-    this.window.on('close', (event) => {
-      if (this.port && this.port.isOpen) {
-        this.port.close()
-      }
-    })
-
-    // Start the render loop
-    this.render()
-  }
-
-  render = () => {
-    if (!this.window) { return }
-    if (this.window.destroyed) { return }
-
-    const now = Date.now()
-    const elapsed = now - this.lastRenderTime
-    
-    // Update cursor blink state
-    if (this.cursorMode === 'blinking') {
-      this.cursorBlinkTime += elapsed
-      if (this.cursorBlinkTime >= this.cursorBlinkInterval) {
-        this.cursorVisible = !this.cursorVisible
-        this.cursorBlinkTime = 0
-      }
-    } else {
-      this.cursorVisible = true
-    }
-    
-    // Create temporary render buffer
-    const renderBuffer = Buffer.from(this.buffer)
-    
-    // Draw cursor if visible and cursorChar is not 0x00 (OFF)
-    if (this.cursorVisible && this.cursorChar !== 0x00) {
-      this.drawCursor(renderBuffer)
-    }
-    
-    this.window.render(VTAC.WIDTH, VTAC.HEIGHT, VTAC.WIDTH, 'rgb332', renderBuffer)
-    
-    this.lastRenderTime = now
-    
-    // Calculate delay to maintain target frame rate
-    const renderTime = Date.now() - now
-    const delay = Math.max(0, this.targetFrameTime - renderTime)
-    
-    setTimeout(this.render, delay)
-  }
-
-  drawCursor = (renderBuffer: Buffer<ArrayBuffer>) => {
-    const character = VTAC.CHARACTERS[this.cursorChar]
-    const startRow = this.row * 8
-    const startColumn = this.column * 8
-    
-    // Draw cursor character with inverted colors
-    for (let y = 0; y < 8; y++) {
-      const rowByte = character[y]
-      const bufferRowStart = (startRow + y) * VTAC.WIDTH
-      
-      for (let x = 0; x < 8; x++) {
-        const bit = (rowByte >> (7 - x)) & 1
-        // Invert the colors: if bit is 1, use background; if 0, use foreground
-        const color = bit ? this.backgroundColor : this.foregroundColor
-        renderBuffer[bufferRowStart + startColumn + x] = color
-      }
-    }
-  }
 
   //
   // METHODS
@@ -165,14 +47,6 @@ export class VTAC {
     this.foregroundColor = 0xFF
     this.bellDuration = 0x3C
     this.bellFrequency = 0x3D
-    this.bellQueue = []
-    this.isBellPlaying = false
-    // Close audio device if open
-    if (this.bellAudioDevice) {
-      this.bellAudioDevice.clearQueue()
-      this.bellAudioDevice.close()
-      this.bellAudioDevice = undefined
-    }
     this.columnNextByte = false
     this.rowNextByte = false
     this.cursorCharNextByte = false
@@ -180,6 +54,7 @@ export class VTAC {
     this.backgroundColorNextByte = false
     this.bellDurationNextByte = false
     this.bellFrequencyNextByte = false
+    this.bellQueue = []
     this.buffer.fill(0x00)
   }
 
@@ -193,97 +68,16 @@ export class VTAC {
     }
     
     // Add bell request to queue
-    this.bellQueue.push({
-      frequency: frequency,
-      duration: this.bellDuration
-    })
-    
-    // Start processing queue if not already playing
-    if (!this.isBellPlaying) {
-      this.processBellQueue()
-    }
+    this.bellQueue.push({ frequency, duration: this.bellDuration })
   }
 
-  processBellQueue = () => {
-    // If queue is empty, stop processing and close audio device
-    if (this.bellQueue.length === 0) {
-      this.isBellPlaying = false
-      if (this.bellAudioDevice) {
-        this.bellAudioDevice.clearQueue()
-        this.bellAudioDevice.pause()
-        this.bellAudioDevice.close()
-        this.bellAudioDevice = undefined
-      }
-      return
-    }
-    
-    // Mark as playing
-    this.isBellPlaying = true
-    
-    // Open audio device if not already open
-    if (!this.bellAudioDevice) {
-      const sampleRate = 44100
-      this.bellAudioDevice = sdl.audio.openDevice(
-        { type: 'playback' },
-        {
-          channels: 1,
-          frequency: sampleRate,
-          format: 'f32',
-          buffered: 4096 // Buffer size must be power of 2
-        }
-      )
-      
-      if (!this.bellAudioDevice) {
-        // Fallback to console beep if audio device cannot be opened
-        process.stdout.write('\u0007')
-        // Clear queue and stop
-        this.bellQueue = []
-        this.isBellPlaying = false
-        return
-      }
-      
-      // Start playback
-      this.bellAudioDevice.play()
-    }
-    
-    // Get next bell request from queue
-    const bellRequest = this.bellQueue.shift()
-    if (!bellRequest) {
-      this.processBellQueue() // Check if queue is empty
-      return
-    }
-    
-    const { frequency, duration } = bellRequest
-    
-    // Convert jiffies (1/60th of a second) to milliseconds
-    const durationMs = (duration / 60) * 1000
-    
-    // Generate sine wave samples
-    const sampleRate = 44100
-    const numSamples = Math.floor((durationMs / 1000) * sampleRate)
-    const samples = new Float32Array(numSamples)
-    
-    for (let i = 0; i < numSamples; i++) {
-      // Generate sine wave: amplitude * sin(2π * frequency * time)
-      const time = i / sampleRate
-      const amplitude = 0.2 // Keep volume at 20% to avoid distortion
-      samples[i] = amplitude * Math.sin(2 * Math.PI * frequency * time)
-      
-      // Apply fade out in the last 10% to avoid clicks
-      const fadeStartSample = numSamples * 0.9
-      if (i > fadeStartSample) {
-        const fadeProgress = (i - fadeStartSample) / (numSamples - fadeStartSample)
-        samples[i] *= (1 - fadeProgress)
-      }
-    }
-    
-    // Enqueue the audio samples
-    this.bellAudioDevice.enqueue(Buffer.from(samples.buffer))
-    
-    // Process next bell in queue after this one finishes
-    setTimeout(() => {
-      this.processBellQueue()
-    }, durationMs)
+  getNextBell = (): { frequency: number, duration: number } | undefined => {
+    // Remove and return the first bell from queue
+    return this.bellQueue.shift()
+  }
+
+  hasQueuedBells = (): boolean => {
+    return this.bellQueue.length > 0
   }
 
   backspace = () => {
@@ -700,348 +494,6 @@ export class VTAC {
         break
       case (data >= 0x80 && data <= 0xFF): // EXTENDED CHARACTERS
         this.data(data)
-        break
-      default:
-        break
-    }
-  }
-
-  transmit = (data: number) => {
-    this.port?.write([data], 'hex', (err) => {
-      if (err) {
-        console.log('Error: ', err.message)
-      }
-    })
-  }
-
-  receive = (data: Buffer<ArrayBuffer>) => {
-    for (let i = 0; i < data.length; i++) {
-      this.parse(data[i])
-    }
-  }
-
-  onKey = (event: sdl.Events.Window.KeyDown) => {
-    switch (event.key) {
-      case 'backspace':
-        this.transmit(0x08)
-        break
-      case 'tab':
-        this.transmit(0x09)
-        break
-      case 'enter':
-      case 'return':
-        this.transmit(0x0D)
-        this.transmit(0x0A)
-        break
-      case 'escape':
-        this.transmit(0x1B)
-        break
-      case 'left':
-        this.transmit(0x1C)
-        break
-      case 'right':
-        this.transmit(0x1D)
-        break
-      case 'up':
-        this.transmit(0x1E)
-        break
-      case 'down':
-        this.transmit(0x1F)
-        break
-      case 'delete':
-        this.transmit(0x7F)
-        break
-      default:
-        break
-    }
-  }
-
-  onText = (event: sdl.Events.Window.TextInput) => {
-    switch (event.text) {
-      case ' ':
-        this.transmit(0x20)
-        break
-      case '!':
-        this.transmit(0x21)
-        break
-      case '"':
-        this.transmit(0x22)
-        break
-      case '#':
-        this.transmit(0x23)
-        break
-      case '$':
-        this.transmit(0x24)
-        break
-      case '%':
-        this.transmit(0x25)
-        break
-      case '&':
-        this.transmit(0x26)
-        break
-      case '\'':
-        this.transmit(0x27)
-        break
-      case '(':
-        this.transmit(0x28)
-        break
-      case ')':
-        this.transmit(0x29)
-        break
-      case '*':
-        this.transmit(0x2A)
-        break
-      case '+':
-        this.transmit(0x2B)
-        break
-      case ',':
-        this.transmit(0x2C)
-        break
-      case '-':
-        this.transmit(0x2D)
-        break
-      case '.':
-        this.transmit(0x2E)
-        break
-      case '/':
-        this.transmit(0x2F)
-        break
-      case '0':
-        this.transmit(0x30)
-        break
-      case '1':
-        this.transmit(0x31)
-        break
-      case '2':
-        this.transmit(0x32)
-        break
-      case '3':
-        this.transmit(0x33)
-        break
-      case '4':
-        this.transmit(0x34)
-        break
-      case '5':
-        this.transmit(0x35)
-        break
-      case '6':
-        this.transmit(0x36)
-        break
-      case '7':
-        this.transmit(0x37)
-        break
-      case '8':
-        this.transmit(0x38)
-        break
-      case '9':
-        this.transmit(0x39)
-        break
-      case ':':
-        this.transmit(0x3A)
-        break
-      case ';':
-        this.transmit(0x3B)
-        break
-      case '<':
-        this.transmit(0x3C)
-        break
-      case '=':
-        this.transmit(0x3D)
-        break
-      case '>':
-        this.transmit(0x3E)
-        break
-      case '?':
-        this.transmit(0x3F)
-        break
-      case '@':
-        this.transmit(0x40)
-        break
-      case 'A':
-        this.transmit(0x41)
-        break
-      case 'B':
-        this.transmit(0x42)
-        break
-      case 'C':
-        this.transmit(0x43)
-        break
-      case 'D':
-        this.transmit(0x44)
-        break
-      case 'E':
-        this.transmit(0x45)
-        break
-      case 'F':
-        this.transmit(0x46)
-        break
-      case 'G':
-        this.transmit(0x47)
-        break
-      case 'H':
-        this.transmit(0x48)
-        break
-      case 'I':
-        this.transmit(0x49)
-        break
-      case 'J':
-        this.transmit(0x4A)
-        break
-      case 'K':
-        this.transmit(0x4B)
-        break
-      case 'L':
-        this.transmit(0x4C)
-        break
-      case 'M':
-        this.transmit(0x4D)
-        break
-      case 'N':
-        this.transmit(0x4E)
-        break
-      case 'O':
-        this.transmit(0x4F)
-        break
-      case 'P':
-        this.transmit(0x50)
-        break
-      case 'Q':
-        this.transmit(0x51)
-        break
-      case 'R':
-        this.transmit(0x52)
-        break
-      case 'S':
-        this.transmit(0x53)
-        break
-      case 'T':
-        this.transmit(0x54)
-        break
-      case 'U':
-        this.transmit(0x55)
-        break
-      case 'V':
-        this.transmit(0x56)
-        break
-      case 'W':
-        this.transmit(0x57)
-        break
-      case 'X':
-        this.transmit(0x58)
-        break
-      case 'Y':
-        this.transmit(0x59)
-        break
-      case 'Z':
-        this.transmit(0x5A)
-        break
-      case '[':
-        this.transmit(0x5B)
-        break
-      case '\\':
-        this.transmit(0x5C)
-        break
-      case ']':
-        this.transmit(0x5D)
-        break
-      case '^':
-        this.transmit(0x5E)
-        break
-      case '_':
-        this.transmit(0x5F)
-        break
-      case '`':
-        this.transmit(0x60)
-        break
-      case 'a':
-        this.transmit(0x61)
-        break
-      case 'b':
-        this.transmit(0x62)
-        break
-      case 'c':
-        this.transmit(0x63)
-        break
-      case 'd':
-        this.transmit(0x64)
-        break
-      case 'e':
-        this.transmit(0x65)
-        break
-      case 'f':
-        this.transmit(0x66)
-        break
-      case 'g':
-        this.transmit(0x67)
-        break
-      case 'h':
-        this.transmit(0x68)
-        break
-      case 'i':
-        this.transmit(0x69)
-        break
-      case 'j':
-        this.transmit(0x6A)
-        break
-      case 'k':
-        this.transmit(0x6B)
-        break
-      case 'l':
-        this.transmit(0x6C)
-        break
-      case 'm':
-        this.transmit(0x6D)
-        break
-      case 'n':
-        this.transmit(0x6E)
-        break
-      case 'o':
-        this.transmit(0x6F)
-        break
-      case 'p':
-        this.transmit(0x70)
-        break
-      case 'q':
-        this.transmit(0x71)
-        break
-      case 'r':
-        this.transmit(0x72)
-        break
-      case 's':
-        this.transmit(0x73)
-        break
-      case 't':
-        this.transmit(0x74)
-        break
-      case 'u':
-        this.transmit(0x75)
-        break
-      case 'v':
-        this.transmit(0x76)
-        break
-      case 'w':
-        this.transmit(0x77)
-        break
-      case 'x':
-        this.transmit(0x78)
-        break
-      case 'y':
-        this.transmit(0x79)
-        break
-      case 'z':
-        this.transmit(0x7A)
-        break
-      case '{':
-        this.transmit(0x7B)
-        break
-      case '|':
-        this.transmit(0x7C)
-        break
-      case '}':
-        this.transmit(0x7D)
-        break
-      case '~':
-        this.transmit(0x7E)
         break
       default:
         break

@@ -3,6 +3,17 @@ VT-AC EXAMPLES
 
 This directory contains NodeJS example scripts that generate binary files for use with the VT-AC terminal.
 
+Using the `-l` Option
+---------------------
+
+The `-l` option loads a binary file into VT-AC at startup.
+
+1. Generate an example `.bin` file from this directory:
+    - `node characters.js`
+2. Run VT-AC and load the generated file:
+    - If installed globally: `vtac -l ./examples/characters.bin`
+    - From source checkout: `node ./dist/index.js -l ./examples/characters.bin`
+
 Available Examples
 ------------------
 

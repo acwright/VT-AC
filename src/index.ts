@@ -7,7 +7,7 @@ import sdl, { Sdl } from '@kmamal/sdl'
 import { SerialPort } from 'serialport'
 import { VTAC } from './VTAC/VTAC'
 
-const VERSION = '1.1.1'
+const VERSION = '1.2.0'
 
 // Parse command line arguments
 const program = new Command()
@@ -76,9 +76,104 @@ if (serialPath) {
   })
 }
 
+// Load file if specified
+if (options.load) {
+  try {
+    const data = readFileSync(options.load)
+    for (let i = 0; i < data.length; i++) {
+      vtac.parse(data[i])
+    }
+  } catch (err) {
+    console.log('Error loading file:', err)
+  }
+}
+
 // Audio playback state
 let isBellPlaying = false
 let bellAudioDevice: any = undefined
+
+// Rendering state
+let lastRenderTime = 0
+const targetFrameTime = 1000 / 60 // 60fps = ~16.67ms per frame
+
+// Cursor rendering state
+let cursorBlinkTime = 0
+let cursorVisible = true
+const cursorBlinkInterval = 500 // Blink every 500ms (twice per second)
+
+// Create window
+const window = sdl.video.createWindow({
+  title: "VT-AC",
+  width: VTAC.WIDTH * scale,
+  height: VTAC.HEIGHT * scale,
+  fullscreen: fullscreen,
+  resizable: false
+})
+
+// Handle window keyboard events
+window.on('keyDown', (event: sdl.Events.Window.KeyDown) => {
+  if (!port || !port.isOpen) return
+  
+  let code: number | undefined
+  
+  switch (event.key) {
+    case 'backspace':
+      code = 0x08
+      break
+    case 'tab':
+      code = 0x09
+      break
+    case 'enter':
+    case 'return':
+      port.write([0x0D, 0x0A], 'hex')
+      return
+    case 'escape':
+      code = 0x1B
+      break
+    case 'left':
+      code = 0x1C
+      break
+    case 'right':
+      code = 0x1D
+      break
+    case 'up':
+      code = 0x1E
+      break
+    case 'down':
+      code = 0x1F
+      break
+    case 'delete':
+      code = 0x7F
+      break
+    default:
+      break
+  }
+  
+  if (code !== undefined) {
+    port.write([code], 'hex')
+  }
+})
+
+// Handle window text input events
+window.on('textInput', (event: sdl.Events.Window.TextInput) => {
+  if (!port || !port.isOpen) return
+  
+  // Convert text to ASCII code
+  const text = event.text
+  if (text.length === 1) {
+    const code = text.charCodeAt(0)
+    if (code >= 0x20 && code <= 0x7E) {
+      port.write([code], 'hex')
+    }
+  }
+})
+
+// Handle window close
+window.on('close', () => {
+  if (port && port.isOpen) {
+    port.close()
+  }
+})
 
 // Audio playback function
 function playBell(frequency: number, duration: number) {
@@ -156,101 +251,6 @@ function playBell(frequency: number, duration: number) {
     }
   }, durationMs)
 }
-
-// Create window
-const window = sdl.video.createWindow({
-  title: "VT-AC",
-  width: VTAC.WIDTH * scale,
-  height: VTAC.HEIGHT * scale,
-  fullscreen: fullscreen,
-  resizable: false
-})
-
-// Cursor rendering state
-let cursorBlinkTime = 0
-let cursorVisible = true
-const cursorBlinkInterval = 500 // Blink every 500ms (twice per second)
-
-// Handle window keyboard events
-window.on('keyDown', (event: sdl.Events.Window.KeyDown) => {
-  if (!port || !port.isOpen) return
-  
-  let code: number | undefined
-  
-  switch (event.key) {
-    case 'backspace':
-      code = 0x08
-      break
-    case 'tab':
-      code = 0x09
-      break
-    case 'enter':
-    case 'return':
-      port.write([0x0D, 0x0A], 'hex')
-      return
-    case 'escape':
-      code = 0x1B
-      break
-    case 'left':
-      code = 0x1C
-      break
-    case 'right':
-      code = 0x1D
-      break
-    case 'up':
-      code = 0x1E
-      break
-    case 'down':
-      code = 0x1F
-      break
-    case 'delete':
-      code = 0x7F
-      break
-    default:
-      break
-  }
-  
-  if (code !== undefined) {
-    port.write([code], 'hex')
-  }
-})
-
-// Handle window text input events
-window.on('textInput', (event: sdl.Events.Window.TextInput) => {
-  if (!port || !port.isOpen) return
-  
-  // Convert text to ASCII code
-  const text = event.text
-  if (text.length === 1) {
-    const code = text.charCodeAt(0)
-    if (code >= 0x20 && code <= 0x7E) {
-      port.write([code], 'hex')
-    }
-  }
-})
-
-// Handle window close
-window.on('close', () => {
-  if (port && port.isOpen) {
-    port.close()
-  }
-})
-
-// Load file if specified
-if (options.load) {
-  try {
-    const data = readFileSync(options.load)
-    for (let i = 0; i < data.length; i++) {
-      vtac.parse(data[i])
-    }
-  } catch (err) {
-    console.log('Error loading file:', err)
-  }
-}
-
-// Rendering state
-let lastRenderTime = 0
-const targetFrameTime = 1000 / 60 // 60fps = ~16.67ms per frame
 
 // Helper function to draw cursor
 function drawCursor(renderBuffer: Buffer<ArrayBuffer>) {

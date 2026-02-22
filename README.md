@@ -285,6 +285,26 @@ npm run build
 node ./dist/index.js -p /dev/ttyUSB0
 ```
 
+### Run Test Suite
+
+Run all unit tests:
+
+```
+npm test
+```
+
+Run tests in watch mode:
+
+```
+npm run test:watch
+```
+
+Run tests with coverage output (text summary + lcov):
+
+```
+npm run test:coverage
+```
+
 ### Release Build
 
 ```

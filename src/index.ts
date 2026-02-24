@@ -36,8 +36,6 @@ const baudRate = parseInt(options.baudrate)
 const parity = options.parity as 'odd' | 'even' | 'none'
 const dataBits = parseInt(options.databits) as 5 | 6 | 7 | 8
 const stopBits = parseFloat(options.stopbits) as 1 | 1.5 | 2
-const fullscreen = options.fullscreen
-const scale = parseInt(options.scale)
 
 // Validate options
 if (dataBits !== 5 && dataBits !== 6 && dataBits !== 7 && dataBits !== 8) {
@@ -48,6 +46,10 @@ if (stopBits !== 1 && stopBits !== 1.5 && stopBits !== 2) {
   console.log('Error: Invalid Stop Bits')
   process.exit(1)
 }
+
+// Display options
+const fullscreen = options.fullscreen
+const scale = parseInt(options.scale)
 
 // Create VTAC instance
 const vtac = new VTAC()

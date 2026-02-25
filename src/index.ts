@@ -3,11 +3,11 @@
 import figlet from 'figlet'
 import { Command } from 'commander'
 import { readFileSync } from 'fs'
-import sdl, { Sdl } from '@kmamal/sdl'
+import sdl from '@kmamal/sdl'
 import { SerialPort } from 'serialport'
 import { VTAC } from './VTAC/VTAC'
 
-const VERSION = '1.2.0'
+const VERSION = '1.2.1'
 
 // Parse command line arguments
 const program = new Command()

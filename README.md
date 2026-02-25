@@ -267,7 +267,7 @@ vtac -p /dev/ttyUSB0 -b 115200 -a none -d 8 -t 1
 
 - `-v, --version` - Output the current version
 - `-h, --help` - Display help information
-- `-p, --path <path>` - Path to the serial port (e.g., /dev/ttyUSB0)
+- `-p, --port <port>` - Path to the serial port (e.g., /dev/ttyUSB0)
 - `-b, --baudrate <baudrate>` - Baud rate (default: "9600")
 - `-a, --parity <parity>` - Parity (default: "none")
 - `-d, --databits <databits>` - Data bits (default: "8")

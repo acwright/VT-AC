@@ -17,7 +17,7 @@ program
   .description('A fantasy ASCII terminal emulator.')
   .version(VERSION, '-v, --version', 'Output the current version')
   .helpOption('-h, --help', 'Output help / options')
-  .option('-p, --path <path>', 'Path to the serial port (e.g., /dev/ttyUSB0)')
+  .option('-p, --port <port>', 'Path to the serial port (e.g., /dev/ttyUSB0)')
   .option('-b, --baudrate <baudrate>', 'Baud Rate', '9600')
   .option('-a, --parity <parity>', 'Parity (odd | even | none)', 'none')
   .option('-d, --databits <databits>', 'Data Bits (5 | 6 | 7 | 8)', '8')
@@ -31,7 +31,7 @@ program
 const options = program.opts()
 
 // Serial port configuration
-const serialPath = options.path
+const port = options.port
 const baudRate = parseInt(options.baudrate)
 const parity = options.parity as 'odd' | 'even' | 'none'
 const dataBits = parseInt(options.databits) as 5 | 6 | 7 | 8
@@ -55,12 +55,12 @@ const scale = parseInt(options.scale)
 const vtac = new VTAC()
 
 // Serial port instance
-let port: SerialPort | undefined
+let serialPort: SerialPort | undefined
 
 // Setup serial port connection
-if (serialPath) {
-  port = new SerialPort({
-    path: serialPath,
+if (port) {
+  serialPort = new SerialPort({
+    path: port,
     baudRate: baudRate,
     parity: parity,
     dataBits: dataBits,
@@ -71,7 +71,7 @@ if (serialPath) {
     }
   })
 
-  port.on('data', (data: Buffer<ArrayBuffer>) => {
+  serialPort.on('data', (data: Buffer<ArrayBuffer>) => {
     for (let i = 0; i < data.length; i++) {
       vtac.parse(data[i])
     }
@@ -114,7 +114,7 @@ const window = sdl.video.createWindow({
 
 // Handle window keyboard events
 window.on('keyDown', (event: sdl.Events.Window.KeyDown) => {
-  if (!port || !port.isOpen) return
+  if (!serialPort || !serialPort.isOpen) return
   
   let code: number | undefined
   
@@ -127,7 +127,7 @@ window.on('keyDown', (event: sdl.Events.Window.KeyDown) => {
       break
     case 'enter':
     case 'return':
-      port.write([0x0D, 0x0A], 'hex')
+      serialPort.write([0x0D, 0x0A], 'hex')
       return
     case 'escape':
       code = 0x1B
@@ -152,28 +152,28 @@ window.on('keyDown', (event: sdl.Events.Window.KeyDown) => {
   }
   
   if (code !== undefined) {
-    port.write([code], 'hex')
+    serialPort.write([code], 'hex')
   }
 })
 
 // Handle window text input events
 window.on('textInput', (event: sdl.Events.Window.TextInput) => {
-  if (!port || !port.isOpen) return
+  if (!serialPort || !serialPort.isOpen) return
   
   // Convert text to ASCII code
   const text = event.text
   if (text.length === 1) {
     const code = text.charCodeAt(0)
     if (code >= 0x20 && code <= 0x7E) {
-      port.write([code], 'hex')
+      serialPort.write([code], 'hex')
     }
   }
 })
 
 // Handle window close
 window.on('close', () => {
-  if (port && port.isOpen) {
-    port.close()
+  if (serialPort && serialPort.isOpen) {
+    serialPort.close()
   }
 })
 

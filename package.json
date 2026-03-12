@@ -1,8 +1,9 @@
 {
   "name": "vtac-terminal",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "A fantasy ASCII terminal emulator",
-  "main": "index.js",
+  "main": "dist/lib.js",
+  "types": "dist/lib.d.ts",
   "bin": {
     "vtac": "dist/index.js"
   },

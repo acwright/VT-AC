@@ -7,7 +7,7 @@ import sdl from '@kmamal/sdl'
 import { SerialPort } from 'serialport'
 import { VTAC } from './VTAC/VTAC'
 
-const VERSION = '1.2.1'
+const VERSION = '1.3.0'
 
 // Parse command line arguments
 const program = new Command()

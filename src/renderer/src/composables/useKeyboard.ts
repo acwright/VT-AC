@@ -1,5 +1,4 @@
 import { onMounted, onUnmounted } from 'vue'
-import { keyToBytes } from '@core/keymap'
 import { useTerminalStore } from '@/stores/terminal'
 
 /**
@@ -10,8 +9,9 @@ import { useTerminalStore } from '@/stores/terminal'
  * both through `keydown`, and `keyToBytes` (Phase 1) already merges the two
  * halves of v1's table, so there is nothing left here but routing.
  *
- * Phase 5 threads the personality and the mode flags through `keyToBytes`'s
- * remaining two parameters; until then every key transmits what v1 transmitted.
+ * What a key transmits depends on terminal state — the personality, DECCKM,
+ * LNM, the keypad mode — so the store answers that question and this composable
+ * stays what it always was: routing, plus the rule about whose keystroke it is.
  */
 
 /**
@@ -35,7 +35,7 @@ export function useKeyboard(): void {
   function onKeyDown(event: KeyboardEvent): void {
     if (isEditableTarget(event)) return
 
-    const bytes = keyToBytes(event)
+    const bytes = store.keyBytes(event)
 
     // `null` means the key is not the terminal's — a shortcut, a function key,
     // a bare modifier — so the browser keeps it and its default action.

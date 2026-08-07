@@ -22,6 +22,14 @@ import type { Personality } from './types'
 export interface KeyEvent {
   /** `KeyboardEvent.key` — 'a', ' ', 'Enter', 'ArrowUp', … */
   key: string
+  /**
+   * `KeyboardEvent.code` — 'KeyA', 'Numpad7', 'NumpadEnter', …
+   *
+   * Only the keypad needs it, and only in application mode: `key` alone cannot
+   * tell `7` on the number row from `7` on the keypad, and DEC's application
+   * keypad gives them different codes.
+   */
+  code?: string
   ctrlKey?: boolean
   altKey?: boolean
   metaKey?: boolean
@@ -107,12 +115,11 @@ export function keyToBytes(
   personality: Personality = 'native',
   modes: KeyModes = {}
 ): number[] | null {
-  // Phase 5 replaces this branch with the VT-100 table (DECCKM cursor keys,
-  // LNM-aware Return, keypad application mode, PF1–PF4). Until it lands,
-  // `vt100` transmits what `native` does rather than transmitting nothing.
-  void personality
-  void modes
+  return personality === 'vt100' ? vt100KeyToBytes(event, modes) : nativeKeyToBytes(event)
+}
 
+/** v1's keyboard, unchanged. */
+function nativeKeyToBytes(event: KeyEvent): number[] | null {
   const mapped = NATIVE_KEYS[event.key]
   if (mapped) return [...mapped]
 
@@ -120,6 +127,133 @@ export function keyToBytes(
   // raised `textInput` for characters the OS had already composed, so Ctrl-C
   // never reached v1 as `0x63`; the guard preserves that. Shift is excluded —
   // it is how the uppercase letter got composed in the first place.
+  if (event.ctrlKey || event.altKey || event.metaKey) return null
+
+  const byte = charToByte(event.key)
+  return byte === null ? null : [byte]
+}
+
+/** The cursor keys' final byte, by `KeyboardEvent.key`. */
+const VT100_ARROWS: Readonly<Record<string, string>> = {
+  ArrowUp: 'A',
+  ArrowDown: 'B',
+  ArrowRight: 'C',
+  ArrowLeft: 'D'
+}
+
+/**
+ * PF1–PF4, on F1–F4.
+ *
+ * A VT100 has four function keys and they are these. F5 and up send nothing,
+ * which leaves the browser's own bindings — refresh, fullscreen — working.
+ */
+const VT100_FUNCTION_KEYS: Readonly<Record<string, string>> = {
+  F1: '\x1bOP',
+  F2: '\x1bOQ',
+  F3: '\x1bOR',
+  F4: '\x1bOS'
+}
+
+/**
+ * The application keypad, by `KeyboardEvent.code`.
+ *
+ * The letters are not arbitrary: DEC assigned `p`–`y` to the digits, and the
+ * punctuation keys take their ASCII code plus 0x40, so `*` `+` `,` `-` `.` `/`
+ * become `j` `k` `l` `m` `n` `o`. A PC keypad has `*`, `+` and `/` where a
+ * VT100 had a comma, and those three are the ANSI extension of the same rule.
+ */
+const VT100_KEYPAD: Readonly<Record<string, string>> = {
+  Numpad0: '\x1bOp',
+  Numpad1: '\x1bOq',
+  Numpad2: '\x1bOr',
+  Numpad3: '\x1bOs',
+  Numpad4: '\x1bOt',
+  Numpad5: '\x1bOu',
+  Numpad6: '\x1bOv',
+  Numpad7: '\x1bOw',
+  Numpad8: '\x1bOx',
+  Numpad9: '\x1bOy',
+  NumpadMultiply: '\x1bOj',
+  NumpadAdd: '\x1bOk',
+  NumpadSubtract: '\x1bOm',
+  NumpadDecimal: '\x1bOn',
+  NumpadDivide: '\x1bOo',
+  NumpadEnter: '\x1bOM'
+}
+
+/**
+ * The control characters Ctrl produces, for the keys where it is not simply
+ * "clear the top three bits".
+ */
+const CONTROL_CHARACTERS: Readonly<Record<string, number>> = {
+  '@': 0x00,
+  ' ': 0x00,
+  '[': 0x1b,
+  '\\': 0x1c,
+  ']': 0x1d,
+  '^': 0x1e,
+  _: 0x1f,
+  '?': 0x7f
+}
+
+/** A sequence, as the bytes to put on the wire. */
+function sequence(text: string): number[] {
+  const bytes: number[] = []
+  for (let i = 0; i < text.length; i++) bytes.push(text.charCodeAt(i))
+  return bytes
+}
+
+function vt100KeyToBytes(event: KeyEvent, modes: KeyModes): number[] | null {
+  // The keypad, and only in application mode — in numeric mode its keys are
+  // ordinary characters and fall through to the character path below.
+  if (modes.keypad === 'application' && event.code !== undefined) {
+    const keypad = VT100_KEYPAD[event.code]
+    if (keypad !== undefined) return sequence(keypad)
+  }
+
+  // DECCKM. `ESC O x` in application mode, `ESC [ x` normally — the single
+  // most common reason arrow keys misbehave in a full-screen application, and
+  // the reason the mode exists at all.
+  const arrow = VT100_ARROWS[event.key]
+  if (arrow !== undefined) {
+    return sequence(`\x1b${modes.cursorKeys === 'application' ? 'O' : '['}${arrow}`)
+  }
+
+  const functionKey = VT100_FUNCTION_KEYS[event.key]
+  if (functionKey !== undefined) return sequence(functionKey)
+
+  switch (event.key) {
+    case 'Enter':
+      // LNM: CR alone normally, CR LF when the host has asked for both. Native
+      // mode always sends both, which is v1's rule and stays v1's rule.
+      return modes.newLine ? [0x0d, 0x0a] : [0x0d]
+    case 'Backspace':
+      // BS, which is what the `vt100` terminfo entry's `kbs` says.
+      return [0x08]
+    case 'Tab':
+      return [0x09]
+    case 'Escape':
+      return [0x1b]
+    case 'Delete':
+      return [0x7f]
+  }
+
+  // Ctrl, which native mode deliberately drops and VT-100 mode cannot.
+  //
+  // v1 never saw Ctrl-C because SDL only raised `textInput` for composed
+  // characters, and native mode keeps that behaviour byte-for-byte. But a
+  // VT-100 with no way to send an interrupt is not a terminal anyone can use
+  // — `vi`, `htop` and every shell need it — so here Ctrl means what it means
+  // on every other terminal: clear the top three bits.
+  if (event.ctrlKey && !event.altKey && !event.metaKey && event.key.length === 1) {
+    const named = CONTROL_CHARACTERS[event.key]
+    if (named !== undefined) return [named]
+
+    const code = event.key.toUpperCase().charCodeAt(0)
+    if (code >= 0x40 && code <= 0x5f) return [code & 0x1f]
+    return null
+  }
+
   if (event.ctrlKey || event.altKey || event.metaKey) return null
 
   const byte = charToByte(event.key)

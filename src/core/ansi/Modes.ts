@@ -94,6 +94,14 @@ export class Modes {
   /** LNM. Reset at power-on: LF is an index and nothing more. */
   newLine = false
 
+  /**
+   * DECKPAM/DECKPNM — `ESC =` and `ESC >`.
+   *
+   * Reset at power-on: the keypad sends digits. Not a DECSET mode, which is
+   * why it has no number; it is set by a bare escape sequence.
+   */
+  keypadApplication = false
+
   /** Back to the power-on values. RIS, and `VTAC.reset()`. */
   reset(): void {
     this.cursorKeys = false
@@ -101,5 +109,6 @@ export class Modes {
     this.autoWrap = true
     this.insert = false
     this.newLine = false
+    this.keypadApplication = false
   }
 }

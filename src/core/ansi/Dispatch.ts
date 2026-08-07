@@ -305,6 +305,12 @@ export class Dispatch implements AnsiHandler, Pen {
     }
 
     switch (final) {
+      case 0x3d: // '=' — DECKPAM, application keypad
+        this.modes.keypadApplication = true
+        break
+      case 0x3e: // '>' — DECKPNM, numeric keypad
+        this.modes.keypadApplication = false
+        break
       case 0x48: // 'H' — HTS, set a tab stop here
         this.setTabStop()
         break

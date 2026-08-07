@@ -1,6 +1,8 @@
 import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import { VTAC } from '@core/VTAC'
+import { keyToBytes } from '@core/keymap'
+import type { KeyEvent } from '@core/keymap'
 import type { Columns } from '@core/VTAC'
 import type { Personality } from '@core/types'
 
@@ -55,6 +57,26 @@ export const useTerminalStore = defineStore('terminal', () => {
   function setPersonality(next: Personality): void {
     vtac.value.setPersonality(next)
     sync()
+  }
+
+  /**
+   * A key event → the bytes to transmit, or `null` when the key sends nothing.
+   *
+   * Here rather than in `useKeyboard` because the answer depends on terminal
+   * state — the personality, DECCKM, LNM and the keypad mode — and the store is
+   * what owns the terminal. Read at keystroke time and never cached: the host
+   * can change any of these from inside the byte stream between one keypress
+   * and the next, which is exactly what `vi` does on the way in and out.
+   */
+  function keyBytes(event: KeyEvent): number[] | null {
+    const terminal = vtac.value
+    const modes = terminal.vt100.modes
+
+    return keyToBytes(event, terminal.personality, {
+      cursorKeys: modes.cursorKeys ? 'application' : 'normal',
+      keypad: modes.keypadApplication ? 'application' : 'numeric',
+      newLine: modes.newLine
+    })
   }
 
   /**
@@ -149,6 +171,7 @@ export const useTerminalStore = defineStore('terminal', () => {
     serialConnected,
     setColumns,
     setPersonality,
+    keyBytes,
     setTransmitCallback,
     setBellCallback,
     transmit,

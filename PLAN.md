@@ -420,7 +420,7 @@ material they draw on, not the order of work.
 | **5.4** | SGR and colour, through `XTERM256_TO_RGB332` | §5.3 | **done** |
 | **5.5** | Modes: DECSET/DECRST, alt screen | §5.3 | **done** |
 | **5.6** | Charsets, tab stops, reports, RIS | §5.3 | **done** |
-| 5.7 | Keyboard, settings, control bar, store wiring | §5.4 | |
+| **5.7** | Keyboard and store wiring | §5.4 | **done** |
 | 5.8 | `vttest` conformance run, real software, `VT100-CONFORMANCE.md` | §5.5 | |
 
 5.1 is the substrate: `src/core/ansi/StateMachine.ts` transcribed from the
@@ -487,6 +487,22 @@ Three sequences are **deliberately unanswered**, and stay that way: DECSTR
 double-height and double-width lines an 8×8 ROM on a fixed grid cannot draw.
 Silence is what the terminal being impersonated returns; guessing at DECSTR's
 DECAWM semantics, which DEC and xterm disagree on, would have been worse.
+
+5.7 is the keyboard: DECCKM cursor keys, LNM-aware Return, PF1–PF4 on F1–F4,
+and the application keypad, which needs `KeyboardEvent.code` since `key` alone
+cannot tell `7` on the number row from `7` on the keypad. The store answers
+"what does this key send", because the answer depends on terminal state the
+store owns. **The settings and control-bar surface for personality and columns
+is Phase 7's, not this stage's** — the components do not exist yet, and Phase 7
+already lists both readouts.
+
+One thing the plan's table does not cover: **Ctrl**. Native mode drops modified
+keystrokes, because SDL only raised `textInput` for composed characters and v1
+never saw a Ctrl-C; that stays exactly as it was. But a VT-100 with no way to
+send an interrupt is not a terminal anyone can run `vi` or `htop` through, so
+in `vt100` Ctrl means what it means everywhere else — clear the top three bits,
+plus the named `@ [ \ ] ^ _ ?` forms. It is one of the places the two
+personalities deliberately part company.
 
 One consequence worth recording: routing on personality makes `ESC 0x04`
 unreachable from `vt100`, so the query's personality byte always reads `00`.

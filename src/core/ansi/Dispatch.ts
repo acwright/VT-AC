@@ -23,26 +23,12 @@
  */
 
 import { Attr } from '../Cell'
+import { Screen } from '../Screen'
+import { AnsiMode, DecMode, Modes } from './Modes'
 import { applySGR, resetPen } from './SGR'
 import type { Pen } from './SGR'
 import type { AnsiHandler, AnsiSequence } from './StateMachine'
 import type { VTAC } from '../VTAC'
-
-/**
- * The DEC private mode that puts the terminal back into VT-AC native mode.
- *
- * `CSI ? 7000 h` leaves `vt100`; `CSI ? 7000 l` re-enters it. The number is
- * VT-AC's invention, so it was chosen from a range nobody else has claimed:
- * xterm's `ctlseqs` documents nothing above 2006, DEC's own private modes are
- * all below 100, and the other well-known squatters sit at 1000–1016 (mouse),
- * 2004 (bracketed paste) and mintty's 7700s. 7000 is clear of all of them.
- *
- * It exists because `ESC 0x03` is a one-way door: it is a *native*-mode escape
- * extension, so once the stream is in `vt100` there is no native byte left to
- * read. A host that switched a terminal into VT-100 mode has to be able to put
- * it back without a power cycle.
- */
-export const DECSET_NATIVE_MODE = 7000
 
 /** Column width of a default VT-100 tab stop. */
 const TAB_WIDTH = 8
@@ -71,6 +57,9 @@ interface SavedCursor {
  * scroll margins — they are passed to it as arguments.
  */
 export class Dispatch implements AnsiHandler, Pen {
+  /** The mode flags. See `Modes` for the two that deliberately live elsewhere. */
+  readonly modes = new Modes()
+
   /**
    * The `Attr` bitfield SGR is currently setting on new text.
    *
@@ -130,13 +119,38 @@ export class Dispatch implements AnsiHandler, Pen {
 
   private saved: SavedCursor | null = null
 
+  /**
+   * The primary screen, while the alternate one is in front of it.
+   *
+   * Null when the terminal is on its primary screen, which is also how
+   * `onAlternateScreen` is answered — there is no separate flag to fall out of
+   * step with the screen actually installed.
+   */
+  private primary: Screen | null = null
+
+  /** The alternate screen, kept between visits so `47` can return to it. */
+  private alternate: Screen | null = null
+
   constructor(private readonly vtac: VTAC) {
     this.bottom = vtac.screen.rows - 1
   }
 
-  /** Back to power-on state. `VTAC.reset()` and RIS alike. */
+  /** Whether the alternate screen is the one currently in front. */
+  get onAlternateScreen(): boolean {
+    return this.primary !== null
+  }
+
+  /**
+   * Back to power-on state. `VTAC.reset()` and RIS alike.
+   *
+   * Margins are *not* reset here — `VTAC.reset()` may be about to change the
+   * row count, and the bottom margin is read off it. It calls `resetMargins()`
+   * afterwards.
+   */
   reset(): void {
-    this.resetMargins()
+    this.leaveAlternateScreen()
+    this.alternate = null
+    this.modes.reset()
     resetPen(this)
     this.pendingWrap = false
     this.saved = null
@@ -174,10 +188,23 @@ export class Dispatch implements AnsiHandler, Pen {
       this.index()
     }
 
+    // IRM — the rest of the line moves right and the cell that fell off the
+    // end is gone, exactly as ICH 1 would have done it.
+    if (this.modes.insert) {
+      screen.insertChars(vtac.column, vtac.row, 1, this.foreground, this.background)
+    }
+
     screen.putGlyph(vtac.column, vtac.row, code, this.foreground, this.background, this.attrs)
 
-    if (vtac.column < screen.cols - 1) vtac.column++
-    else this.pendingWrap = true
+    if (vtac.column < screen.cols - 1) {
+      vtac.column++
+    } else if (this.modes.autoWrap) {
+      // DECAWM set: arm the deferred wrap. The cursor stays on the last column
+      // and the *next* character is what moves it.
+      this.pendingWrap = true
+    }
+    // DECAWM reset: the cursor sits on the last column and every further
+    // character overwrites it. No wrap, ever.
 
     vtac.offset = 0
   }
@@ -203,6 +230,9 @@ export class Dispatch implements AnsiHandler, Pen {
       case 0x0b: // VT — a VT-100 treats both as an index
       case 0x0c: // FF
         this.index()
+        // LNM — a line feed returns the carriage too, which is what turns a
+        // host sending bare LFs into readable output.
+        if (this.modes.newLine) this.setColumn(0)
         break
       case 0x0d: // CR
         this.setColumn(0)
@@ -289,7 +319,7 @@ export class Dispatch implements AnsiHandler, Pen {
         break
       case 0x48: // 'H' — CUP
       case 0x66: // 'f' — HVP, identical to CUP
-        this.setRow(seq.paramOr(0, 1) - 1)
+        this.setRowFromParam(seq.paramOr(0, 1))
         this.setColumn(seq.paramOr(1, 1) - 1)
         break
       case 0x4a: // 'J' — ED
@@ -317,7 +347,13 @@ export class Dispatch implements AnsiHandler, Pen {
         this.pendingWrap = false
         break
       case 0x64: // 'd' — VPA
-        this.setRow(count - 1)
+        this.setRowFromParam(count)
+        break
+      case 0x68: // 'h' — SM, set mode
+        this.ansiModes(seq, true)
+        break
+      case 0x6c: // 'l' — RM, reset mode
+        this.ansiModes(seq, false)
         break
       case 0x6d: // 'm' — SGR
         applySGR(seq, this)
@@ -352,6 +388,28 @@ export class Dispatch implements AnsiHandler, Pen {
     vtac.row = Math.min(Math.max(row, 0), vtac.screen.rows - 1)
     vtac.offset = 0
     this.pendingWrap = false
+  }
+
+  /**
+   * CUP and VPA's row parameter — one-based, and origin-mode aware.
+   *
+   * DECOM set means row 1 *is* the top margin and the cursor cannot address
+   * anything outside the region at all. That is the point of the mode: an
+   * application can set a region and then forget the margins exist.
+   */
+  private setRowFromParam(oneBased: number): void {
+    if (!this.modes.origin) {
+      this.setRow(oneBased - 1)
+      return
+    }
+    const row = this.top + oneBased - 1
+    this.setRow(Math.min(Math.max(row, this.top), this.bottom))
+  }
+
+  /** Where the cursor goes home to — the top margin under DECOM. */
+  private home(): void {
+    this.setRow(this.modes.origin ? this.top : 0)
+    this.setColumn(0)
   }
 
   /**
@@ -438,8 +496,7 @@ export class Dispatch implements AnsiHandler, Pen {
 
     if (saved === null) {
       resetPen(this)
-      this.setRow(0)
-      this.setColumn(0)
+      this.home()
       return
     }
 
@@ -554,10 +611,9 @@ export class Dispatch implements AnsiHandler, Pen {
     this.top = top
     this.bottom = bottom
 
-    // DECSTBM homes the cursor. Absolute for now — DECOM, which makes home the
-    // top margin instead, is 5.5's.
-    this.setRow(0)
-    this.setColumn(0)
+    // DECSTBM homes the cursor — to the top margin under DECOM, to the top of
+    // the screen otherwise.
+    this.home()
   }
 
   //
@@ -565,18 +621,155 @@ export class Dispatch implements AnsiHandler, Pen {
   //
 
   /**
-   * DECSET/DECRST. Only mode 7000 is answered so far; the rest are 5.5's.
+   * DECSET/DECRST — `CSI ? Pn h` and `CSI ? Pn l`.
    *
-   * Each parameter is a separate mode, so `CSI ? 1 ; 7000 h` sets both — which
-   * is why this loops rather than reading `param(0)`.
+   * Each parameter is a separate mode, so `CSI ? 1 ; 25 h` sets both — which is
+   * why this loops rather than reading `param(0)`.
    */
   private privateModes(seq: AnsiSequence, set: boolean): void {
+    for (let i = 0; i < seq.paramCount; i++) this.privateMode(seq.param(i), set)
+  }
+
+  private privateMode(mode: number, set: boolean): void {
+    const vtac = this.vtac
+
+    switch (mode) {
+      case DecMode.CursorKeys: // DECCKM
+        this.modes.cursorKeys = set
+        break
+
+      case DecMode.Columns: // DECCOLM
+        // On a VT100 this is 80/132; VT-AC has no 132, so it drives the 40/80
+        // switch the terminal actually has. Clears the screen and homes, as
+        // DECCOLM does on real hardware.
+        vtac.setColumns(set ? 80 : 40)
+        break
+
+      case DecMode.ReverseVideo: // DECSCNM
+        vtac.screen.reverse = set
+        vtac.screen.dirtyAll()
+        break
+
+      case DecMode.Origin: // DECOM
+        this.modes.origin = set
+        // Setting *or* resetting DECOM homes the cursor, which is the only way
+        // the two coordinate systems can be swapped without it landing
+        // somewhere meaningless.
+        this.home()
+        break
+
+      case DecMode.AutoWrap: // DECAWM
+        this.modes.autoWrap = set
+        if (!set) this.pendingWrap = false
+        break
+
+      case DecMode.CursorVisible: // DECTCEM
+        vtac.cursorVisible = set
+        break
+
+      case DecMode.AlternateScreen: // 47
+        if (set) this.enterAlternateScreen(false)
+        else this.leaveAlternateScreen()
+        break
+
+      case DecMode.AlternateScreenClearOnExit: // 1047
+        if (set) {
+          this.enterAlternateScreen(false)
+        } else {
+          // Cleared on the way *out*, so the buffer a later `47` finds is
+          // blank rather than holding the last application's screen.
+          if (this.alternate !== null) this.alternate.clear(this.foreground, this.background)
+          this.leaveAlternateScreen()
+        }
+        break
+
+      case DecMode.AlternateScreenAndCursor: // 1049
+        // The one applications actually use: save the cursor, switch, and
+        // clear. Without it `vi` and `htop` scribble over the primary screen
+        // and leave it wrecked on exit.
+        if (set) {
+          this.saveCursor()
+          this.enterAlternateScreen(true)
+        } else {
+          this.leaveAlternateScreen()
+          this.restoreCursor()
+        }
+        break
+
+      case DecMode.NativeMode: // VT-AC's own
+        vtac.setPersonality(set ? 'native' : 'vt100')
+        break
+
+      // Accepted and deliberately inert. DECANM's reset would mean VT52, which
+      // VT-AC does not have and will not pretend to; DECSCLM asks for smooth
+      // scrolling on a framebuffer that never pans; DECARM is the host
+      // keyboard's auto-repeat. Answering them silently is right — a terminal
+      // that does not have a mode simply does not have it.
+      case DecMode.Ansi:
+      case DecMode.SmoothScroll:
+      case DecMode.AutoRepeat:
+        break
+    }
+  }
+
+  /** SM/RM — `CSI Pn h` and `CSI Pn l`, no private marker. */
+  private ansiModes(seq: AnsiSequence, set: boolean): void {
     for (let i = 0; i < seq.paramCount; i++) {
       switch (seq.param(i)) {
-        case DECSET_NATIVE_MODE:
-          this.vtac.setPersonality(set ? 'native' : 'vt100')
+        case AnsiMode.Insert: // IRM
+          this.modes.insert = set
+          break
+        case AnsiMode.NewLine: // LNM
+          this.modes.newLine = set
           break
       }
     }
+  }
+
+  //
+  // ALTERNATE SCREEN
+  //
+  // A second `Screen`, swapped by reference. Phase 2 is what makes this cheap:
+  // a `Screen` owns its planes outright, so there is nothing to copy and
+  // nothing shared to get wrong.
+  //
+
+  /** Put the alternate screen in front, creating it the first time. */
+  private enterAlternateScreen(clear: boolean): void {
+    const vtac = this.vtac
+    if (this.primary !== null) return
+
+    // Rebuilt whenever the geometry has moved on — a column switch resizes the
+    // screen it is *on*, so a cached alternate can outlive the shape it was
+    // made for.
+    const current = vtac.screen
+    if (
+      this.alternate === null ||
+      this.alternate.cols !== current.cols ||
+      this.alternate.rows !== current.rows
+    ) {
+      this.alternate = new Screen(current.cols, current.rows, this.foreground, this.background)
+    }
+
+    this.primary = current
+    this.alternate.reverse = current.reverse
+    vtac.screen = this.alternate
+
+    if (clear) this.alternate.clear(this.foreground, this.background)
+
+    // The renderer has been looking at a different plane, and its backing store
+    // still holds it.
+    this.alternate.dirtyAll()
+  }
+
+  /** Put the primary screen back, untouched. A no-op when already on it. */
+  leaveAlternateScreen(): void {
+    const primary = this.primary
+    if (primary === null) return
+
+    primary.reverse = this.vtac.screen.reverse
+    this.vtac.screen = primary
+    this.primary = null
+    primary.dirtyAll()
   }
 }

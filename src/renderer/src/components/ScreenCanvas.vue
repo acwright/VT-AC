@@ -123,8 +123,14 @@ function frame(now: number): void {
     includeCell(damage.col + damage.cols - 1, damage.row + damage.rows - 1)
   }
 
+  // `cursorGlyph` is `cursorChar`, except that an unset one means the VT-100's
+  // own block while that personality is in force; `cursorVisible` is DECTCEM,
+  // and is always true in native mode.
+  const cursorGlyph = vtac.cursorGlyph
   const showCursor =
-    vtac.cursorChar !== 0x00 && (vtac.cursorMode !== 'blinking' || blinkOn)
+    vtac.cursorVisible &&
+    cursorGlyph !== 0x00 &&
+    (vtac.cursorMode !== 'blinking' || blinkOn)
 
   // Repaint the old cursor cell when the cursor has left it or gone dark, and
   // the new one whenever it is lit — the raster there holds an overlay, not
@@ -149,7 +155,7 @@ function frame(now: number): void {
       screen.width,
       vtac.column,
       vtac.row,
-      vtac.cursorChar,
+      cursorGlyph,
       vtac.foregroundColor,
       vtac.backgroundColor
     )

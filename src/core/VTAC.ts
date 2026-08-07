@@ -13,6 +13,12 @@ export const GEOMETRIES = {
 /** A column count `setColumns` accepts. */
 export type Columns = keyof typeof GEOMETRIES
 
+/**
+ * The cursor a VT-100 shows when nothing has asked for another — CP437's full
+ * block, which `overlayCursor` draws inverted into a solid rectangle.
+ */
+export const VT100_CURSOR = 0xdb
+
 export class VTAC {
 
   /** @deprecated Instance geometry lives on `screen`; this is the 40-column default. */
@@ -32,7 +38,13 @@ export class VTAC {
    * now a two-line delegation. The renderer reads `screen.plane` and
    * `screen.takeDamage()` directly; `buffer` is for everything that predates it.
    */
-  readonly screen: Screen = new Screen(VTAC.COLUMNS, VTAC.ROWS)
+  /**
+   * Not `readonly`: the alternate screen buffer (`CSI ? 1049 h`) is this
+   * reference being pointed at a second `Screen`. Everything that reads the
+   * screen goes through here and picks up the swap for free — including
+   * `buffer`, which notices the plane changed underneath it.
+   */
+  screen: Screen = new Screen(VTAC.COLUMNS, VTAC.ROWS)
 
   /**
    * The VT-100 personality: its state — scroll margins, saved cursor, pending
@@ -142,6 +154,31 @@ export class VTAC {
   cursorMode: 'solid' | 'blinking' = 'solid'
   cursorCharNextByte: boolean = false
 
+  /**
+   * DECTCEM — whether the cursor is drawn at all.
+   *
+   * On `VTAC` rather than with the other VT-100 modes, for the same reason the
+   * colours are: the renderer needs one place to look, and native mode has to
+   * read `true` without knowing the mode exists. Nothing in the native protocol
+   * writes it — `0x02 0x00` is native's way to turn the cursor off.
+   */
+  cursorVisible: boolean = true
+
+  /**
+   * The glyph to draw as the cursor, or `0x00` for none.
+   *
+   * `cursorChar` defaults to OFF, which is v1's behaviour and right for a
+   * terminal whose host chooses its cursor. A VT-100 does not work that way —
+   * it has a block cursor and it is on — and an application like `vi` has no
+   * native command available to ask for one. So in the `vt100` personality an
+   * unset cursor means the VT-100's own block, while a host that picked a glyph
+   * before switching keeps it.
+   */
+  get cursorGlyph(): number {
+    if (this.cursorChar !== 0x00) return this.cursorChar
+    return this.personality === 'vt100' ? VT100_CURSOR : 0x00
+  }
+
   bellDuration: number = 0x3C // Duration in jiffies (1/60th of a second) (Default: 1 second)
   bellFrequency: number = 0x3D // Frequency value (Default: C6)
   bellDurationNextByte: boolean = false
@@ -204,6 +241,12 @@ export class VTAC {
   setColumns = (columns: Columns) => {
     const geometry = GEOMETRIES[columns]
     if (geometry === undefined) return
+
+    // Back to the primary screen *before* resizing, or the resize would land
+    // on the alternate one and leave the primary at the old geometry. DECCOLM
+    // clears the screen anyway, so an alternate buffer holding the old shape
+    // has nothing left worth preserving.
+    this.vt100.leaveAlternateScreen()
 
     this.screen.resize(geometry.cols, geometry.rows, this.foregroundColor, this.backgroundColor)
     this.column = 0
@@ -269,7 +312,12 @@ export class VTAC {
     this.bellFrequencyNextByte = false
     this.escapeNextByte = false
     this.bellQueue = []
+    this.cursorVisible = true
     this.ansi.reset()
+
+    // Ahead of the geometry work below, so the screen it operates on is the
+    // primary one. `resetMargins` comes after, once the row count is settled.
+    this.vt100.reset()
 
     // Back to the *configured* defaults, not to hard-coded ones: someone who
     // launched `vtac --columns 80 --mode vt100` is running an 80-column VT-100,
@@ -283,9 +331,9 @@ export class VTAC {
       this.screen.reset()
     }
 
-    // Last, because the bottom margin is read off the row count and the line
+    // Last, because the bottom margin is read off the row count and the lines
     // above may just have changed it.
-    this.vt100.reset()
+    this.vt100.resetMargins()
   }
 
   bell = () => {

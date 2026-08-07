@@ -73,6 +73,20 @@ export class Screen {
   /** Phase of the 500ms blink clock. `false` hides `Attr.BLINK` cells. */
   blinkOn = true
 
+  /**
+   * DECSCNM — the whole screen drawn in reverse video.
+   *
+   * A screen-level flag rather than a pass over the cells, because it has to be
+   * reversible: flipping every cell's `Attr.REVERSE` would lose which of them
+   * asked for reverse video themselves. The rasterizer combines the two, so a
+   * reverse cell on a reversed screen comes out the right way up — which is
+   * what DECSCNM means.
+   *
+   * `Pixels` cells are unaffected. Reverse video is a foreground/background
+   * swap, and a cell holding literal RGB332 pixels has neither.
+   */
+  reverse = false
+
   private dirtyCount = 0
 
   private damageMinCol = 0
@@ -451,6 +465,7 @@ export class Screen {
 
   /** Reset to a blank screen: white on black, nothing dirty, all damaged. */
   reset(): void {
+    this.reverse = false
     this.clear(0xff, 0x00)
   }
 
@@ -507,6 +522,23 @@ export class Screen {
     return rect
   }
 
+  /**
+   * Mark every cell as needing rasterizing again.
+   *
+   * For the changes that alter how cells *render* without altering any of them
+   * — DECSCNM, and swapping a screen back in front of a renderer that has been
+   * showing something else.
+   */
+  dirtyAll(): void {
+    for (let i = 0; i < this.dirty.length; i++) {
+      if (this.dirty[i] === 0) {
+        this.dirty[i] = 1
+        this.dirtyCount++
+      }
+    }
+    this.damageAll()
+  }
+
   /** Mark the whole screen as changed — after a resize, or a lost context. */
   damageAll(): void {
     this.damageMinCol = 0
@@ -558,7 +590,10 @@ export class Screen {
     let bg = this.bg[i]
 
     if ((attrs & Attr.BOLD) !== 0) fg = brightenRGB332(fg)
-    if ((attrs & Attr.REVERSE) !== 0) {
+
+    // The cell's own reverse and the screen's combine rather than override: a
+    // reverse cell on a reversed screen reads the right way up.
+    if (((attrs & Attr.REVERSE) !== 0) !== this.reverse) {
       const swap = fg
       fg = bg
       bg = swap

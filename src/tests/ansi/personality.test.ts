@@ -9,7 +9,7 @@
  */
 
 import { VTAC } from '@core/VTAC'
-import { DECSET_NATIVE_MODE } from '@core/ansi/Dispatch'
+import { DECSET_NATIVE_MODE } from '@core/ansi/Modes'
 import { State } from '@core/ansi/StateMachine'
 import { BLANK_CODE } from '@core/Cell'
 

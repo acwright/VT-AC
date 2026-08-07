@@ -418,7 +418,7 @@ material they draw on, not the order of work.
 | **5.2** | `Screen` operations ANSI needs: scroll regions, IL/DL/ICH/DCH/ECH | — | **done** |
 | **5.3** | CSI dispatch: cursor, erase, edit, DECSTBM, deferred wrap | §5.3 | **done** |
 | **5.4** | SGR and colour, through `XTERM256_TO_RGB332` | §5.3 | **done** |
-| 5.5 | Modes: DECSET/DECRST, alt screen | §5.3 | |
+| **5.5** | Modes: DECSET/DECRST, alt screen | §5.3 | **done** |
 | 5.6 | Charsets, tab stops, reports, RIS | §5.3 | |
 | 5.7 | Keyboard, settings, control bar, store wiring | §5.4 | |
 | 5.8 | `vttest` conformance run, real software, `VT100-CONFORMANCE.md` | §5.5 | |
@@ -460,6 +460,20 @@ harder than they lean on any attribute — and because native mode's `0x18`/`0x1
 write the same two values. The 256-colour trap is documented at both ends
 (`SGR.ts` and `palette.ts`) and demonstrated by a test showing two xterm greys
 landing on one RGB332 byte; the README says it plainly in Phase 12.
+
+5.5 adds `ansi/Modes.ts` and the alternate screen. Two mode flags deliberately
+live outside it: DECSCNM is on `Screen`, because the rasterizer is what has to
+know and the flag has to survive a buffer swap; DECTCEM is on `VTAC`, alongside
+the cursor itself, so the renderer has one place to look and native mode reads
+`true` without knowing the mode exists.
+
+Two things the plan did not call for but the personality needs. **A VT-100 mode
+cursor**: `cursorChar` defaults to OFF, which is right for v1 and wrong for a
+terminal running `vi`, which has no native command available to ask for one — so
+`VTAC.cursorGlyph` returns CP437's block in the `vt100` personality unless a
+host chose a glyph before switching. And **`39`/`49`** in 5.4, without which an
+application can only reach default colours through `SGR 0`, losing its
+attributes with them.
 
 One consequence worth recording: routing on personality makes `ESC 0x04`
 unreachable from `vt100`, so the query's personality byte always reads `00`.

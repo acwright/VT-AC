@@ -4,12 +4,11 @@ import type { Ref } from 'vue'
 /**
  * The window's fullscreen state.
  *
- * Three things ask about it — the control bar's icon, the Settings panel's
- * DISPLAY toggle, and the saved `fullscreen` setting — and only the main
- * process actually knows, since the window can also be put in and out of
- * fullscreen by F11, the green button or the menu bar. So the state lives here,
- * module-level, fed by main's `fullscreenChanged` event rather than by whoever
- * last pressed something.
+ * Two things ask about it — the control bar's icon and the Settings panel's
+ * DISPLAY toggle — and only the main process actually knows, since the window
+ * can also be put in and out of fullscreen by F11, the green button or the menu
+ * bar. So the state lives here, module-level, fed by main's `fullscreenChanged`
+ * event rather than by whoever last pressed something; main saves it.
  *
  * Electron only. A browser tab has the Fullscreen API, but it is gesture-gated,
  * escapable by the browser's own UI and not persisted anywhere — three
@@ -51,12 +50,11 @@ export function useFullscreen(): {
       isFullscreen.value = value
     })
 
+    // Saving it is main's job, not this listener's: `vtac -f` puts the window
+    // in fullscreen for one launch, and from here that is indistinguishable
+    // from the user pressing F11. Main knows which of the two happened.
     const off = bridge.window.onFullscreenChanged((value) => {
       isFullscreen.value = value
-      // Persist whatever the window ended up doing, whichever route it took —
-      // this button, F11, or the title bar. `AppSettings.fullscreen` is what
-      // main reads at `ready-to-show`, so it has to mean "how it was left".
-      void bridge.settings.set({ fullscreen: value })
     })
 
     // F11 and ⌘↵, captured before the terminal's own keydown handler: neither

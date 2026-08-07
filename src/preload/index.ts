@@ -3,6 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import { IPC } from '../shared/types'
 import type { AppSettings, CliShimStatus, PortInfo, SerialConfig, SerialStatus } from '../shared/types'
 import type { AppApi } from '../shared/api'
+import type { BootPayload } from '../shared/boot'
 
 const api: AppApi = {
   app: {
@@ -20,7 +21,7 @@ const api: AppApi = {
   },
 
   boot: {
-    get: (): Promise<unknown | null> => ipcRenderer.invoke(IPC.BOOT_GET)
+    get: (): Promise<BootPayload | null> => ipcRenderer.invoke(IPC.BOOT_GET)
   },
 
   serial: {

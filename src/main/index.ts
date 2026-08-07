@@ -9,7 +9,10 @@ import {
   MIN_SCALE,
   MAX_SCALE
 } from '../shared/types'
-import type { AppSettings, CliShimStatus, SerialConfig } from '../shared/types'
+import type { AppSettings, SerialConfig } from '../shared/types'
+import type { BootPayload } from '../shared/boot'
+import { bootConfigFrom, readBootPayload } from './boot'
+import { CliShimService } from './cliShim'
 import { SerialService } from './serial'
 import { SettingsService } from './settings'
 
@@ -18,6 +21,29 @@ import { SettingsService } from './settings'
 let mainWindow: BrowserWindow | null = null
 let serialService: SerialService
 let settingsService: SettingsService
+const cliShimService = new CliShimService()
+
+/**
+ * What `vtac` asked this launch to boot with, if it launched us at all.
+ *
+ * Read here rather than inside `whenReady` because the config carries the
+ * window's own size and fullscreen state, which have to be known before the
+ * window is built. The file is consumed — read and deleted — by this call.
+ */
+const boot = bootConfigFrom(process.argv)
+
+/** Read lazily and once: the renderer asks for it during its own start-up. */
+let bootPayload: Promise<BootPayload> | undefined
+
+/**
+ * True until the boot-driven fullscreen has been accounted for.
+ *
+ * `-f` is a launch-only flag, but the window entering fullscreen looks exactly
+ * like the user pressing F11 from here — and that is saved. Swallowing the
+ * first transition is what keeps `vtac -f` from quietly deciding how the app
+ * opens tomorrow.
+ */
+let ignoreFullscreenSave = boot?.fullscreen === true
 
 // ── Window ───────────────────────────────────────────────────────────────────
 
@@ -72,15 +98,25 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
     if (settings.fullscreen) mainWindow?.setFullScreen(true)
+    // Launched from a shell, the window is the point of the command — it should
+    // come forward rather than open behind the terminal that asked for it.
+    if (boot) app.focus({ steal: true })
   })
 
   // Fullscreen state → renderer, so the control bar's icon matches the window
-  // even when the change came from F11 or the green button.
+  // even when the change came from F11 or the green button. Saved here rather
+  // than by the renderer for the same reason: main is the only side that hears
+  // every route into and out of fullscreen, including the ones no button of
+  // ours was pressed for.
   mainWindow.on('enter-full-screen', () => {
     mainWindow?.webContents.send(IPC.WINDOW_FULLSCREEN_CHANGED, true)
+    if (ignoreFullscreenSave) ignoreFullscreenSave = false
+    else settingsService.set({ fullscreen: true })
   })
   mainWindow.on('leave-full-screen', () => {
     mainWindow?.webContents.send(IPC.WINDOW_FULLSCREEN_CHANGED, false)
+    ignoreFullscreenSave = false
+    settingsService.set({ fullscreen: false })
   })
 
   mainWindow.on('closed', () => {
@@ -121,6 +157,19 @@ app.whenReady().then(() => {
   serialService = new SerialService()
   settingsService = new SettingsService()
 
+  // Everything `vtac` set on the command line, for this launch only: the
+  // framing, personality and geometry it named, plus the window's own scale and
+  // fullscreen state. `override` keeps them out of the settings file while
+  // still making them what `get()` reports, so the panel shows what is actually
+  // in effect and `createWindow` below sizes to the scale that was asked for.
+  if (boot) {
+    settingsService.override({
+      ...boot.settings,
+      ...(boot.scale !== undefined ? { scale: boot.scale } : {}),
+      ...(boot.fullscreen === true ? { fullscreen: true } : {})
+    })
+  }
+
   // ── App / window ───────────────────────────────────────────────────────────
 
   ipcMain.handle(IPC.APP_GET_VERSION, () => app.getVersion())
@@ -133,10 +182,14 @@ app.whenReady().then(() => {
 
   // ── Boot config ────────────────────────────────────────────────────────────
 
-  // Phase 8 replaces this with `bootConfigFrom(process.argv)` and
-  // `readBootPayload`. Null is the honest answer until the CLI exists to pass
-  // one: nothing launched this window with a config.
-  ipcMain.handle(IPC.BOOT_GET, () => null)
+  // Null when the app was opened any other way, which is the renderer's cue to
+  // start normally. The files are read once and the same promise handed to
+  // whoever asks, so a reload cannot re-read them halfway through a start-up.
+  ipcMain.handle(IPC.BOOT_GET, () => {
+    if (!boot) return null
+    bootPayload ??= readBootPayload(boot)
+    return bootPayload
+  })
 
   // ── Serial ─────────────────────────────────────────────────────────────────
 
@@ -166,13 +219,9 @@ app.whenReady().then(() => {
 
   // ── CLI shim ───────────────────────────────────────────────────────────────
 
-  // Phase 8 replaces these with `CliShimService`. Registered now so the Phase 7
-  // panel gets a definite answer instead of an unhandled-channel rejection, and
-  // says so plainly rather than reporting a successful no-op.
-  const notYet = { ok: false, message: 'The vtac command line arrives in Phase 8.' }
-  ipcMain.handle(IPC.CLI_STATUS, (): CliShimStatus => ({ installed: false }))
-  ipcMain.handle(IPC.CLI_INSTALL, () => notYet)
-  ipcMain.handle(IPC.CLI_UNINSTALL, () => notYet)
+  ipcMain.handle(IPC.CLI_STATUS, () => cliShimService.status())
+  ipcMain.handle(IPC.CLI_INSTALL, () => cliShimService.install())
+  ipcMain.handle(IPC.CLI_UNINSTALL, () => cliShimService.uninstall())
 
   // ── Start ──────────────────────────────────────────────────────────────────
 

@@ -787,6 +787,24 @@ the shim runs the CLI under `ELECTRON_RUN_AS_NODE`. If electron-builder's `files
 filter drops it, inline the banner as a static string rather than adding a
 runtime dependency to the packaged CLI.
 
+**Settled: inlined** (`src/cli/banner.ts`). The banner is a constant, and the
+only way to verify the other branch is to build a package — Phase 11 — so the
+choice was between carrying the risk to the end or removing it now. `figlet`
+moved to `devDependencies`, and `args.test.ts` asserts the copy still matches
+`figlet.textSync('VT-AC', { font: 'cricket' })`, so the two cannot drift.
+
+Two things the plan's sketch did not cover, both found by wiring it up:
+
+- **`-f` would have persisted.** `AppSettings.fullscreen` means "how the window
+  was left", and the renderer was saving every transition — including the one
+  `vtac -f` causes, which would have made a launch-only flag decide how the app
+  opens tomorrow. Saving moved to `main/index.ts`, which is the only side that
+  can tell the CLI's fullscreen from the user's F11, and swallows the first.
+- **`-s` no longer defaults to 2.** v1 had no memory, so its `-s 2` default cost
+  nothing; v2 remembers the window scale, and a default that applied on every
+  launch would silently resize the window each time. Unspecified now means
+  "leave it as it was" — the only v1 flag whose *absence* behaves differently.
+
 ---
 
 ## Phase 9 — Web build and CI
@@ -963,7 +981,8 @@ that `vt100` can simply not be offered yet.
    doesn't check pixels. `images/palette.png` is ground truth.
 5. **`serialport` in a packaged Electron build** (Phase 11) — native ABI and asar
    unpacking. Test on a packaged build during Phase 6.
-6. **`figlet` inside the packaged CLI's asar** (Phase 8) — verify or inline.
+6. ~~**`figlet` inside the packaged CLI's asar** (Phase 8) — verify or inline.~~
+   **Retired:** inlined in Phase 8, guarded by a test.
 7. **Web Serial's narrower support** (Phase 9) — Chromium-only, HTTPS-only,
    user-gesture-gated. Told to the user in the panel rather than discovered.
 8. **macOS notarization + serial entitlements** (Phase 11) — the EMULATOR has a

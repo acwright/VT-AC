@@ -9,14 +9,10 @@ import { useKeyboard } from '@/composables/useKeyboard'
 import { useBell } from '@/composables/useBell'
 import { useSerial } from '@/composables/useSerial'
 import { useFullscreen } from '@/composables/useFullscreen'
+import { bootPayload } from '@/composables/useBoot'
 import { useTerminalStore } from '@/stores/terminal'
 
-/**
- * The screen, the control bar, and the two overlays.
- *
- * Phase 8 replaces the start-up below with `useBoot`, which folds `vtac -l`,
- * `-p` and `--fullscreen` into the same ordered sequence.
- */
+/** The screen, the control bar, and the two overlays. */
 
 const store = useTerminalStore()
 
@@ -50,30 +46,51 @@ function openSettings(section: SettingsSection): void {
  * bell — so that the Settings panel can bind straight to that state instead of
  * loading its own copy and risking writing it back. The web build has no
  * `window.api` and so starts at the defaults, which is what Phase 9 fixes.
+ *
+ * The order is what `vtac` needs it to be: settings first (with anything the
+ * command line named already folded in by main), then the terminal at that
+ * geometry, then the port, and only then the `-l` file — so a data file lands
+ * on a screen that is already the right size, in the right personality, with
+ * the line open behind it.
  */
 async function start(): Promise<void> {
+  // What `vtac` launched this window with, if it did. Null otherwise, and
+  // everything below then behaves exactly as it did before the CLI existed.
+  const boot = await bootPayload()
+  for (const problem of boot?.errors ?? []) console.error('[boot]', problem)
+
   const settings = await window.api?.settings.get()
   if (settings === undefined) return
 
   // `configure`, not `setColumns`/`setPersonality`: these are the terminal's
-  // configured defaults, so a RIS from the far end comes back to them.
+  // configured defaults, so a RIS from the far end comes back to them — which
+  // for `vtac --mode vt100 -c 80` means the mode it was launched in.
   store.configure(settings)
 
   serial.config.value = { ...settings.serialConfig }
-  serial.port.value = settings.lastPort ?? ''
+  serial.port.value = boot?.serialPort ?? settings.lastPort ?? ''
 
   bell.muted.value = settings.bellMuted
   bell.volume.value = settings.bellVolume ?? 1
 
-  // Reconnect to the line this terminal was last wired to — but only if it is
-  // still there. A saved path whose device has been unplugged should be a
-  // silent no-op, not an error the user has to dismiss on every launch.
-  if (settings.lastPort !== undefined) {
+  if (boot?.serialPort !== undefined) {
+    // `-p` names one device deliberately, so it is opened without first asking
+    // whether it is in the port list: a device that has gone missing is worth
+    // an error here, unlike the saved port below.
+    await serial.connect(undefined, boot.serialPort)
+  } else if (settings.lastPort !== undefined) {
+    // Reconnect to the line this terminal was last wired to — but only if it is
+    // still there. A saved path whose device has been unplugged should be a
+    // silent no-op, not an error the user has to dismiss on every launch.
     const ports = await serial.listPorts()
     if (ports.some((port) => port.path === settings.lastPort)) {
       await serial.connect()
     }
   }
+
+  // `-l`, through the same path as the Load button and a dropped file, so it is
+  // reloadable from the panel afterwards.
+  if (boot?.load) store.load(boot.load.bytes, boot.load.label)
 }
 
 /**

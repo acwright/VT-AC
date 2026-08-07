@@ -13,7 +13,7 @@ import type { PortInfo, SerialConfig, SerialStatus } from '@shared/types'
  * `store.parse` twice — which for a terminal means every character appearing
  * on screen twice — and a connection is not the Settings panel's to own:
  * opening and closing that panel should not connect or disconnect hardware.
- * `App.vue` holds it; the panel (Phase 7) and `vtac -p` (Phase 8) drive this
+ * `App.vue` holds it; the panel and `vtac -p` drive this
  * same one.
  */
 type Serial = {
@@ -119,7 +119,7 @@ function createSerial(): Serial {
    * Open the line.
    *
    * Both arguments default to the shared state above, so the control bar's link
-   * button is `connect()` with nothing to know — and `vtac -p` (Phase 8) still
+   * button is `connect()` with nothing to know — and `vtac -p` still
    * gets to name a port explicitly.
    */
   async function connect(

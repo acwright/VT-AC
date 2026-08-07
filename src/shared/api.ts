@@ -5,6 +5,7 @@ import type {
   SerialConfig,
   SerialStatus
 } from './types'
+import type { BootPayload } from './boot'
 
 /**
  * The shape of `window.api`, exposed by the Electron preload via contextBridge
@@ -23,12 +24,11 @@ export interface AppApi {
   }
   boot: {
     /**
-     * The file and settings `vtac` launched this window with — null when the
-     * app was opened any other way. Main has already read the files.
-     *
-     * Always null until Phase 8 gives the CLI something to write.
+     * The file and port `vtac` launched this window with — null when the app
+     * was opened any other way. Main has already read the file; the settings
+     * the command line named are folded into `settings.get()` instead.
      */
-    get(): Promise<unknown | null>
+    get(): Promise<BootPayload | null>
   }
   serial: {
     listPorts(): Promise<PortInfo[]>

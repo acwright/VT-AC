@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Dev entry point for the vtac CLI.
 //
-// Once the desktop app ships the CLI (PLAN.md Phase 8) the installed shim runs
-// the bundled build through Electron's own Node, so no separate runtime is
-// needed. From a checkout, build with `npm run build:cli` and this runs it.
+// The installed `vtac` is a shim that runs the CLI bundled inside the app,
+// through Electron's own Node — see src/main/cliShim.ts — so no separate
+// runtime is needed. From a checkout, build with `npm run build:cli`, which
+// `npm run cli` does for you.
 'use strict'
 
 const { existsSync } = require('node:fs')

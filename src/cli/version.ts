@@ -3,7 +3,7 @@ import { join } from 'node:path'
 
 /**
  * The CLI's own version — always the version of the app it belongs to, since
- * the shim (Phase 8) runs the CLI bundled inside the currently-installed app
+ * the shim runs the CLI bundled inside the currently-installed app
  * rather than a separately-versioned package.
  *
  * `npm_package_version` only exists under an `npm run` script — never true for

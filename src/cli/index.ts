@@ -1,20 +1,42 @@
 #! /usr/bin/env node
 
-import { cliVersion } from './version'
+import { CommanderError } from 'commander'
+import { UsageError, parseArgs } from './args'
+import { launchApp } from './launch'
 
-// Phase 0 scaffold. Phase 8 replaces this body with `args.ts` (commander, v1's
-// full option set plus --mode and --columns) and `launch.ts` (write a
-// BootConfig to a temp file, spawn the app with --boot-config, exit 0).
-//
-// There are no subcommands and nothing prints terminal output: every flag
-// launches the app, and the window is the output.
-
-const argv = process.argv.slice(2)
-
-if (argv.includes('-v') || argv.includes('--version')) {
-  process.stdout.write(`${cliVersion()}\n`)
-  process.exitCode = 0
-} else {
-  process.stderr.write('vtac: not implemented yet — see PLAN.md Phase 8\n')
-  process.exitCode = 1
+/**
+ * `vtac [flags]` — open the app with those flags applied.
+ *
+ * No subcommands, and nothing here prints terminal output: the window is the
+ * output (PLAN.md §Divergences). Every flag either describes the window to
+ * open, the line to open, or the file to feed it — and all three cross to the
+ * app as a `BootConfig`.
+ */
+async function main(argv: string[]): Promise<number> {
+  const { config, app } = parseArgs(argv)
+  // `VTAC_APP` is the same escape hatch as `--app`, for a shell profile that
+  // knows where an AppImage or a development build lives.
+  return launchApp(config, { app: app ?? process.env.VTAC_APP })
 }
+
+main(process.argv.slice(2))
+  .then((code) => {
+    process.exitCode = code
+  })
+  .catch((error: unknown) => {
+    // Commander has already written the help, the version, or its own complaint
+    // about the flag it could not read; only the exit code is left to set.
+    if (error instanceof CommanderError) {
+      process.exitCode = error.exitCode
+      return
+    }
+
+    // v1 wrote these to stdout. stderr is where they belong — the text is what
+    // a script greps for, and it is unchanged.
+    const message = error instanceof Error ? error.message : String(error)
+    process.stderr.write(`${message}\n`)
+    if (!(error instanceof UsageError) && error instanceof Error && error.stack) {
+      process.stderr.write(`${error.stack}\n`)
+    }
+    process.exitCode = 1
+  })

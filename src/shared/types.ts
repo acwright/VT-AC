@@ -120,7 +120,7 @@ export const IPC = {
   WINDOW_TOGGLE_FULLSCREEN: 'window:toggleFullscreen',
   WINDOW_IS_FULLSCREEN: 'window:isFullscreen',
   WINDOW_FULLSCREEN_CHANGED: 'window:fullscreenChanged',
-  // What `vtac` asked this launch to boot with (Phase 8, src/shared/boot.ts)
+  // What `vtac` asked this launch to boot with — see src/shared/boot.ts
   BOOT_GET: 'boot:get',
   // Serial port
   SERIAL_LIST_PORTS: 'serial:listPorts',
@@ -132,7 +132,7 @@ export const IPC = {
   // Settings
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
-  // CLI shim (Phase 8)
+  // CLI shim
   CLI_STATUS: 'cli:status',
   CLI_INSTALL: 'cli:install',
   CLI_UNINSTALL: 'cli:uninstall'

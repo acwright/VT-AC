@@ -178,7 +178,7 @@ export const useTerminalStore = defineStore('terminal', () => {
 
   /**
    * Load a data file — the control bar's button, a drop on the window, and
-   * `vtac -l` (Phase 8) all land here.
+   * `vtac -l` all land here.
    *
    * Held afterwards so Reload can replay it. A data file is a recording of a
    * session, and watching it twice is the obvious thing to want; re-picking it

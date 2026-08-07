@@ -22,6 +22,9 @@
  * not an escape sequence printed as text.
  */
 
+import { Attr } from '../Cell'
+import { applySGR, resetPen } from './SGR'
+import type { Pen } from './SGR'
 import type { AnsiHandler, AnsiSequence } from './StateMachine'
 import type { VTAC } from '../VTAC'
 
@@ -55,8 +58,9 @@ interface SavedCursor {
   column: number
   row: number
   pendingWrap: boolean
-  foregroundColor: number
-  backgroundColor: number
+  foreground: number
+  background: number
+  attrs: number
 }
 
 /**
@@ -66,7 +70,37 @@ interface SavedCursor {
  * bell queue all live on `VTAC`, and `Screen` deliberately knows nothing about
  * scroll margins — they are passed to it as arguments.
  */
-export class Dispatch implements AnsiHandler {
+export class Dispatch implements AnsiHandler, Pen {
+  /**
+   * The `Attr` bitfield SGR is currently setting on new text.
+   *
+   * VT-100 state, so it lives here — native mode never sets an attribute.
+   */
+  attrs: number = Attr.NONE
+
+  /**
+   * The pen's two colours, which are `VTAC`'s.
+   *
+   * Not held here, because they are not the VT-100's alone: erasing fills with
+   * the current background (that is "background colour erase", and full-screen
+   * applications depend on it), `Screen`'s scroll and clear take them, and
+   * native mode's `0x18`/`0x19` write the same two values. One set of colours,
+   * two ways of setting them.
+   */
+  get foreground(): number {
+    return this.vtac.foregroundColor
+  }
+  set foreground(value: number) {
+    this.vtac.foregroundColor = value
+  }
+
+  get background(): number {
+    return this.vtac.backgroundColor
+  }
+  set background(value: number) {
+    this.vtac.backgroundColor = value
+  }
+
   /**
    * Top margin of the scroll region, 0-based and inclusive.
    *
@@ -103,6 +137,7 @@ export class Dispatch implements AnsiHandler {
   /** Back to power-on state. `VTAC.reset()` and RIS alike. */
   reset(): void {
     this.resetMargins()
+    resetPen(this)
     this.pendingWrap = false
     this.saved = null
   }
@@ -139,7 +174,7 @@ export class Dispatch implements AnsiHandler {
       this.index()
     }
 
-    screen.putGlyph(vtac.column, vtac.row, code, vtac.foregroundColor, vtac.backgroundColor)
+    screen.putGlyph(vtac.column, vtac.row, code, this.foreground, this.background, this.attrs)
 
     if (vtac.column < screen.cols - 1) vtac.column++
     else this.pendingWrap = true
@@ -284,6 +319,9 @@ export class Dispatch implements AnsiHandler {
       case 0x64: // 'd' — VPA
         this.setRow(count - 1)
         break
+      case 0x6d: // 'm' — SGR
+        applySGR(seq, this)
+        break
       case 0x72: // 'r' — DECSTBM
         this.setScrollRegion(seq)
         break
@@ -374,15 +412,16 @@ export class Dispatch implements AnsiHandler {
     vtac.offset = 0
   }
 
-  /** DECSC. */
+  /** DECSC — position and pen alike, which is what makes it usable at all. */
   private saveCursor(): void {
     const vtac = this.vtac
     this.saved = {
       column: vtac.column,
       row: vtac.row,
       pendingWrap: this.pendingWrap,
-      foregroundColor: vtac.foregroundColor,
-      backgroundColor: vtac.backgroundColor
+      foreground: this.foreground,
+      background: this.background,
+      attrs: this.attrs
     }
   }
 
@@ -398,13 +437,15 @@ export class Dispatch implements AnsiHandler {
     const saved = this.saved
 
     if (saved === null) {
+      resetPen(this)
       this.setRow(0)
       this.setColumn(0)
       return
     }
 
-    vtac.foregroundColor = saved.foregroundColor
-    vtac.backgroundColor = saved.backgroundColor
+    this.foreground = saved.foreground
+    this.background = saved.background
+    this.attrs = saved.attrs
     this.setRow(saved.row)
     this.setColumn(saved.column)
     this.pendingWrap = saved.pendingWrap && vtac.column === vtac.screen.cols - 1

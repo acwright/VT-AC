@@ -273,7 +273,6 @@ describe('sequences not implemented yet', () => {
   // stop reading the stream. Each of these moves out of this list as the stage
   // that owns it lands.
   it.each([
-    ['SGR', '[1;31m'], // 5.4
     ['DECTCEM', '[?25l'], // 5.5
     ['SCS', '(0'], // 5.6
     ['DECSTR', '[!p'], // 5.6

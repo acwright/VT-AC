@@ -824,7 +824,9 @@ runtime dependency to the packaged CLI.
 only way to verify the other branch is to build a package — Phase 11 — so the
 choice was between carrying the risk to the end or removing it now. `figlet`
 moved to `devDependencies`, and `args.test.ts` asserts the copy still matches
-`figlet.textSync('VT-AC', { font: 'cricket' })`, so the two cannot drift.
+`figlet.textSync('VT-AC', { font: 'Cricket' })`, so the two cannot drift.
+  The capital is the filename: figlet opens `fonts/<name>.flf` directly, so
+  `cricket` resolved on macOS and only broke on CI's Linux runner.
 
 Two things the plan's sketch did not cover, both found by wiring it up:
 

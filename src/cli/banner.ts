@@ -1,5 +1,5 @@
 /**
- * v1's help banner — `figlet.textSync('VT-AC', { font: 'cricket' })`, frozen.
+ * v1's help banner — `figlet.textSync('VT-AC', { font: 'Cricket' })`, frozen.
  *
  * Inlined rather than generated at run time, which PLAN.md Phase 8 names as the
  * alternative to verifying that `figlet` resolves from inside the packaged
@@ -10,7 +10,7 @@
  * should be.
  *
  * Regenerate with:
- *   npx figlet -f cricket VT-AC
+ *   npx figlet -f Cricket VT-AC
  */
 export const BANNER = [
   '  ___ ___ _______        _______ _______ ',

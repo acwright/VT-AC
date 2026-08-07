@@ -124,10 +124,15 @@ describe('the two new flags', () => {
 })
 
 describe('the help banner', () => {
-  it('is what figlet draws for VT-AC in cricket', () => {
+  it('is what figlet draws for VT-AC in Cricket', () => {
     // Inlined so the packaged CLI has no font files to find at run time
     // (PLAN.md Phase 8). This is the check that the copy stayed a copy.
+    //
+    // `Cricket` with the capital, because that is the filename: figlet opens
+    // `fonts/<name>.flf` directly, so on a case-insensitive filesystem any
+    // casing works and on CI's Linux runner only this one does. It passed here
+    // and failed there for exactly that reason.
     const figlet = require('figlet') as { textSync(text: string, options: unknown): string }
-    expect(BANNER).toBe(figlet.textSync('VT-AC', { font: 'cricket' }))
+    expect(BANNER).toBe(figlet.textSync('VT-AC', { font: 'Cricket' }))
   })
 })

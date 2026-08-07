@@ -89,6 +89,15 @@ export interface AppSettings {
    * first gesture. See `useBell`.
    */
   bellMuted: boolean
+  /**
+   * Bell output level, 0–1, before the per-note amplitude.
+   *
+   * Not in the plan's Phase 6 list, which names only `bellMuted` — but Phase 7's
+   * BELL section has a volume slider, and a volume that forgets itself every
+   * launch is a slider nobody would touch twice. Optional so a settings file
+   * written before this existed still loads.
+   */
+  bellVolume?: number
   /** The port last connected to, offered again next launch. */
   lastPort?: string
 }
@@ -99,7 +108,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   columns: 40,
   scale: 3,
   fullscreen: false,
-  bellMuted: false
+  bellMuted: false,
+  bellVolume: 1
 }
 
 // ── IPC channels ─────────────────────────────────────────────────────────────

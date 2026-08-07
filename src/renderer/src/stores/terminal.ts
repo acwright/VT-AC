@@ -167,6 +167,34 @@ export const useTerminalStore = defineStore('terminal', () => {
     for (let i = 0; i < data.length; i++) parse(data[i])
   }
 
+  // ── The loaded file ────────────────────────────────────────────────────────
+
+  /** The name of the last file fed through `parse`, for the FILES section. */
+  const loadedName = ref<string | null>(null)
+
+  // The bytes themselves, kept out of the reactive surface: nothing renders off
+  // them, and they are the one thing here that can be megabytes long.
+  let loadedBytes: Uint8Array | null = null
+
+  /**
+   * Load a data file — the control bar's button, a drop on the window, and
+   * `vtac -l` (Phase 8) all land here.
+   *
+   * Held afterwards so Reload can replay it. A data file is a recording of a
+   * session, and watching it twice is the obvious thing to want; re-picking it
+   * through a file dialog every time is not.
+   */
+  function load(bytes: Uint8Array, name: string): void {
+    loadedBytes = bytes
+    loadedName.value = name
+    parseBytes(bytes)
+  }
+
+  /** Replay the loaded file from the top. No-op when nothing is loaded. */
+  function reload(): void {
+    if (loadedBytes !== null) parseBytes(loadedBytes)
+  }
+
   /**
    * `0x04` — full reset. The control bar's Reset button, Phase 7.
    *
@@ -192,6 +220,9 @@ export const useTerminalStore = defineStore('terminal', () => {
     height,
     personality,
     serialConnected,
+    loadedName,
+    load,
+    reload,
     setColumns,
     setPersonality,
     configure,

@@ -33,7 +33,8 @@ describe('SettingsService', () => {
       columns: 40,
       scale: 3,
       fullscreen: false,
-      bellMuted: false
+      bellMuted: false,
+      bellVolume: 1
     })
   })
 

@@ -21,6 +21,21 @@ type Serial = {
   status: Ref<SerialStatus>
   /** The last error a connect attempt produced, for the panel to show. */
   error: Ref<string | null>
+  /**
+   * The framing the next connection will use, and the one the control bar
+   * reads out as `9600 8N1`.
+   *
+   * Shared rather than owned by the Settings panel, because two things now
+   * display it and a readout that disagreed with the panel two clicks away
+   * would be worse than no readout. Hydrated from settings at start-up
+   * (`App.vue`) and edited in place by the panel.
+   */
+  config: Ref<SerialConfig>
+  /**
+   * The port path to open — the panel's selection, and `lastPort` at start-up.
+   * Empty under the web build, where the browser's picker owns port identity.
+   */
+  port: Ref<string>
   listPorts: () => Promise<PortInfo[]>
   connect: (config?: SerialConfig, portPath?: string) => Promise<void>
   disconnect: () => Promise<void>
@@ -35,6 +50,8 @@ function createSerial(): Serial {
   const status = ref<SerialStatus>('disconnected')
   const error = ref<string | null>(null)
   const available = service.isAvailable()
+  const config = ref<SerialConfig>({ ...DEFAULT_SERIAL_CONFIG })
+  const port = ref('')
 
   // Outgoing bytes are buffered and flushed every 10 ms rather than sent one
   // IPC message at a time. A burst — a paste, or several reports answered while
@@ -98,17 +115,27 @@ function createSerial(): Serial {
     }
   }
 
+  /**
+   * Open the line.
+   *
+   * Both arguments default to the shared state above, so the control bar's link
+   * button is `connect()` with nothing to know — and `vtac -p` (Phase 8) still
+   * gets to name a port explicitly.
+   */
   async function connect(
-    config: SerialConfig = DEFAULT_SERIAL_CONFIG,
-    portPath?: string
+    settings: SerialConfig = config.value,
+    portPath: string | undefined = port.value || undefined
   ): Promise<void> {
     error.value = null
     try {
-      await service.connect(config, portPath)
+      await service.connect(settings, portPath)
       // Remembered so the picker opens on the device actually in use, and so a
       // relaunch finds the same line. Web has no path to remember — the browser
       // owns port identity.
-      if (portPath) void window.api?.settings.set({ lastPort: portPath })
+      if (portPath !== undefined) {
+        port.value = portPath
+        void window.api?.settings.set({ lastPort: portPath })
+      }
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err)
       console.warn('[useSerial] connect failed:', err)
@@ -119,7 +146,7 @@ function createSerial(): Serial {
     await service.disconnect()
   }
 
-  return { available, status, error, listPorts, connect, disconnect }
+  return { available, status, error, config, port, listPorts, connect, disconnect }
 }
 
 export function useSerial(): Serial {

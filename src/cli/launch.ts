@@ -60,9 +60,13 @@ function installedCandidates(): string[] {
     }
     default:
       // An AppImage can live anywhere, so it is not guessable — that is what
-      // `--app` and `VTAC_APP` are for. These cover the deb's install layout,
-      // whose executable name Phase 11 settles.
-      return ['/opt/VT-AC/vtac', '/opt/VT-AC/vt-ac', '/opt/VT-AC/VT-AC', '/usr/bin/vt-ac']
+      // `--app` and `VTAC_APP` are for. These two are the deb's install layout:
+      // Phase 11 settled the executable name as `vt-ac`, so that the symlink
+      // the deb's postinst drops in /usr/bin does not take the name this
+      // command already has. `/opt/VT-AC` is the product name, not the
+      // executable name — electron-builder installs under one and links the
+      // other.
+      return ['/opt/VT-AC/vt-ac', '/usr/bin/vt-ac']
   }
 }
 

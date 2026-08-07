@@ -968,6 +968,58 @@ serial port, and whose Settings → COMMAND LINE button installs a working `vtac
 unpacked from the asar. This is the most likely "works in dev, broken when
 packaged" failure. Test a packaged build during Phase 6, not here.
 
+**All four items ported as written, and all three platforms were built rather
+than only the one the gate names.** `VT-AC-2.0.0-mac-arm64.dmg` signed with
+Developer ID and notarized; `VT-AC-2.0.0-win-x64.exe` through Wine;
+`VT-AC-2.0.0-linux-{x86_64.AppImage,amd64.deb}` through the Docker builder.
+The gate was run against the installed app, not the build directory: the dmg
+mounted, `VT-AC.app` copied to `/Applications`, and driven over the DevTools
+protocol. It listed all four serial ports, connected at 9600 8-N-1, and
+rendered bytes the far end of the Phase 10 loopback sent it. Settings →
+COMMAND LINE then wrote `/usr/local/bin/vtac`, which answers `2.0.0` and
+launches the app with a boot config.
+
+**Risk 5 is retired.** `npmRebuild` + `asarUnpack` did their job first time:
+`app.asar.unpacked/…/bindings-cpp/build/Release/bindings.node` is present in
+the mac and linux packages, the win32-x64 prebuilt in the Windows one. That the
+ports enumerated *from the installed app* is the proof — nothing in dev
+exercises that path.
+
+**The name `vtac` had two claimants on Linux, and only there.** The deb's
+`postinst` symlinks `/usr/bin/<executableName>`, so an app binary named `vtac`
+would have put the *app launcher* on PATH under the name the CLI shim wants —
+answering `vtac --version` with Electron's version and silently dropping every
+flag, since nothing would be parsing them. macOS hides its binary inside
+`VT-AC.app` and Windows leaves `VT-AC.exe` in a directory that is not on PATH,
+so neither can collide. Settled as `linux.executableName: vt-ac` — which is
+what the two surviving candidates in `src/cli/launch.ts` now look for, at
+`/opt/VT-AC/vt-ac` and `/usr/bin/vt-ac`. The other two guesses that file
+carried are gone; the deb is built and its layout is known. Left unset the name
+would have come from `package.json` (`vtac-terminal`) and matched nothing.
+
+**The dmg is deliberately unsigned, and that is not the same as unnotarized.**
+electron-builder's own schema warns that signing the disk image "will lead to
+unwanted errors in combination with notarization requirements" — a signed
+container with no ticket of its own is worse than a plain one, because
+Gatekeeper then evaluates the container and finds nothing. What matters is that
+the ticket is stapled to the app inside, which was checked rather than assumed:
+a copy extracted from the dmg with `com.apple.quarantine` set — a download, as
+far as macOS is concerned — comes back `accepted / source=Notarized Developer
+ID`, offline.
+
+Two things found by running it that belong to Phase 12 rather than here:
+
+- **v1 and v2 can both own `vtac`.** The npm package left
+  `/opt/homebrew/bin/vtac` symlinked at `vtac-terminal@1.3.0`, and Homebrew's
+  bin precedes `/usr/local/bin`, so bare `vtac` answered `1.3.0` with the v2
+  shim correctly installed. `npm uninstall -g vtac-terminal` fixes it, which is
+  already what §Phase 12's "Migrating from v1.x" says to run — worth saying
+  *why* there, since the symptom is a working install that looks broken.
+- **The Linux packages carry one icon size**, 512×512 `vt-ac.png`, because
+  `build/icon.png` is a single PNG and that is electron-builder's documented
+  single-file path. It works; a `build/icons/` directory of sizes out of Phase
+  10's `gen-icon.mjs` would render better at taskbar scale.
+
 ---
 
 ## Phase 12 — Documentation, protocol spec, npm retirement, release
@@ -1087,11 +1139,14 @@ that `vt100` can simply not be offered yet.
 3. **Scroll regions × IL/DL** (Phase 5) — where off-by-one errors hide.
 4. **RGB332 conversion** (Phase 1) — silently wrong colors pass every test that
    doesn't check pixels. `images/palette.png` is ground truth.
-5. **`serialport` in a packaged Electron build** (Phase 11) — native ABI and asar
-   unpacking. Test on a packaged build during Phase 6.
+5. ~~**`serialport` in a packaged Electron build** (Phase 11) — native ABI and asar
+   unpacking.~~ **Retired:** the installed app enumerates ports and carries real
+   traffic over the loopback; `npmRebuild` + `asarUnpack` needed no help.
 6. ~~**`figlet` inside the packaged CLI's asar** (Phase 8) — verify or inline.~~
    **Retired:** inlined in Phase 8, guarded by a test.
 7. **Web Serial's narrower support** (Phase 9) — Chromium-only, HTTPS-only,
    user-gesture-gated. Told to the user in the panel rather than discovered.
-8. **macOS notarization + serial entitlements** (Phase 11) — the EMULATOR has a
-   working pair to copy, which removes most of the difficulty.
+8. ~~**macOS notarization + serial entitlements** (Phase 11) — the EMULATOR has a
+   working pair to copy, which removes most of the difficulty.~~ **Retired:** the
+   pair copied over unchanged, notarization succeeded on the first submission,
+   and a quarantined copy of the app passes Gatekeeper offline.

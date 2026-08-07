@@ -30,6 +30,10 @@ A fantasy ASCII terminal emulator.
 
 ![VT-AC Demo](https://github.com/acwright/VT-AC/blob/main/images/VT-AC.gif?raw=true)
 
+80-column VT-100 mode, running `htop` over a serial link:
+
+![VT-AC running htop in 80-column VT-100 mode](https://github.com/acwright/VT-AC/blob/main/images/VT-AC-htop.gif?raw=true)
+
 ## Quick Start
 1. Install VT-AC globally via NPM:
 ```

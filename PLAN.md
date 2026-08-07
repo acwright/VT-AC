@@ -864,11 +864,12 @@ console error is `/favicon.ico`, which Phase 10 supplies.
 
 ## Phase 10 — Icon and branding
 
-1. `build/vtac.png`, 1024×1024: a flat three-quarter VT100 enclosure in
-   `--vt-bezel` with `--vt-bezel-dark` shading and a `--vt-trim` base, screen
-   recessed in near-black, carrying a green phosphor cursor block and a glyph or
-   two drawn from `Font.CHARACTERS` at 8×8, scaled by whole pixels. At 16px what
-   survives is beige rectangle + dark screen + green mark — the intended read.
+1. `build/vtac.png`, 1024×1024: **the bezel as the tile** — `--vt-bezel` edge to
+   edge on the platform's own 185-unit corner, with an 800×600 screen recessed in
+   near-black behind a `--vt-trim` ring, centred so the band above the glass
+   matches the band below. On it: `VT-AC` and a green phosphor block cursor, real
+   `Font.CHARACTERS` entries at 8×8 scaled ×14. At 16px what survives is beige
+   rectangle + dark screen + green mark — the intended read.
 2. `build/gen-icon.mjs` — ported, `6502.png` → `vtac.png`; emits `icon.iconset/`,
    `icon.icns`, `icon.ico`, `icon.png` via `sips`/`iconutil`/`magick`.
 3. `src/renderer/public/` — `favicon.svg`, `favicon-32.png`, `apple-touch-icon.png`:
@@ -877,6 +878,75 @@ console error is `/favicon.ico`, which Phase 10 supplies.
    the bezel framing a screen of real terminal output).
 5. Fresh `images/VT-AC.gif` of the Electron app for the README — and a second
    showing 80-column VT-100 mode running `htop`, which is the release's headline.
+
+**Everything above is generated, and that was the decision worth making.**
+`build/art.mjs` is a small rasterizer — rounded rectangles with coverage
+sampling, a PNG encoder over `zlib`, and a glyph blitter — and `npm run art`
+emits the source PNG, all three web icons and the link card from it. Three
+things fall out of that which a vector editor could not have given:
+
+- The icon's screen carries **real `Font.CHARACTERS` entries**, at 8×8 scaled by
+  a whole number. `VT-AC` on the glass is the ROM, not a traced likeness of it.
+- The palette is **read out of `style.css`** rather than copied into the script,
+  so the icon's beige and the app's beige cannot drift.
+- The Open Graph card is **a real 80×60 VT-100 screen**: the script builds a
+  `VTAC`, sets 80 columns and the `vt100` personality, writes DEC line drawing,
+  SGR colour and the AVO attributes into it, and expands the framebuffer through
+  the same `RGB332_RGBA` table the renderer uses. The card cannot advertise a
+  screen the app does not draw.
+
+The 16px read was checked rather than assumed, and it is what §Phase 10 asked
+for: beige rectangle, dark screen, green mark.
+
+**The enclosure drawing is gone, and that was a call made by looking at it.**
+The sketch above originally described a flat three-quarter VT100 — stand, shaded
+extrusion, badge — and it was built and reviewed at 16, 32, 128 and 1024px
+before being thrown out. Three rounds settled it: the stand and the extrusion
+went, because an icon is a tile and not a portrait, and every unit spent drawing
+the machine was a unit the screen did not get; the outer shape kept the
+platform's corner, because macOS does not mask app icons and a hard square would
+be the one square icon on the shelf; and the glyphs came down to ×14, because at
+the size they started they read as a logotype set in a rectangle rather than as
+text on a terminal. Two things are now deliberately *unlike* the hardware and
+both are recorded in `art.mjs`: the beige band is symmetric where a real VT100's
+chin is deeper, and the tile is a tile rather than a machine.
+
+`favicon.svg` and the 32px PNG are that same tile with the wordmark dropped —
+five glyphs are illegible below about 128px, and a favicon is identified by shape
+and colour rather than read. `apple-touch-icon.png` is the only one drawn square:
+iOS masks a home-screen icon itself, so handing it the rounded tile would round
+an already-rounded shape and notch the corners.
+
+**The GIFs come from the built app, over the hardware loopback.**
+`scripts/capture-demo.mjs` writes a `BootConfig`, launches `out/main`, drives
+the far end of the two cables, screenshots over the DevTools protocol and
+assembles the frames with ffmpeg. `screencapture` and `osascript` are both
+gated behind permissions this environment lacks, and a hand-timed recording is
+not reproducible; this is — same bytes, same baud rate, same frame times.
+
+Four things it took to get there, three of them worth keeping:
+
+- **A partial `serialConfig` is not a partial.** `SettingsService.override`
+  replaces the key wholesale, so a boot config naming only `baudRate` produced a
+  framing the port could not open — the app came up disconnected with the
+  readout showing defaults. This is the same rule `cli/args.ts` already
+  documents for the framing flags, arrived at from the other direction.
+- **The pty and the wire belong to different processes.** `pty-host.py` exists
+  because Node cannot allocate a pty; it does not own the serial port because
+  when it did, `termios` on this PL2303 carried clean bytes at 9600 and noise at
+  every rate above it, while the same cables driven by `serialport` at both ends
+  were byte-perfect at 115200. The wire belongs to the implementation the
+  project already trusts.
+- **Whole-pixel scaling is not a nicety.** In 80-column mode one terminal pixel
+  is one CSS pixel, so the half-scale capture that suits 40 columns resampled the
+  8×8 ROM into mush and made a correct `htop` look corrupt. It took dumping the
+  screen as text to establish that the render was right and the *image* was
+  wrong — worth remembering before reading a bug out of a downscaled screenshot.
+- One genuine limit surfaced, and it is not a defect: `htop`'s sort indicator is
+  a **UTF-8 arrow**, and a CP437 terminal draws its two bytes as two CP437
+  glyphs. Nothing to fix — a glyph ROM is a glyph ROM — but §Phase 12's VT-100
+  documentation should say so, since it is the first thing anyone running
+  modern ncurses software will notice.
 
 ---
 

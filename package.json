@@ -31,7 +31,8 @@
   "type": "commonjs",
   "scripts": {
     "postinstall": "node node_modules/electron/install.js",
-    "icons": "node build/gen-icon.mjs",
+    "art": "node build/gen-art.mjs",
+    "icons": "npm run art --silent && node build/gen-icon.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build && npm run build:cli",
     "preview": "electron-vite preview",

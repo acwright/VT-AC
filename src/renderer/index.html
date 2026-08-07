@@ -9,6 +9,38 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self' blob:"
     />
     <title>VT-AC</title>
+    <meta
+      name="description"
+      content="A VT terminal that could have existed, but did not — 80 columns, VT-100/ANSI, a CP437 glyph ROM and a 256-colour RGB332 framebuffer."
+    />
+
+    <!--
+      Icons. Vite rewrites these root-relative paths with the configured base,
+      so the same markup serves the Pages build at /VT-AC/ and the file:// URL
+      the Electron renderer loads from.
+    -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!--
+      Link preview. The card is generated art (`npm run art`) and its URL has to
+      be absolute — a crawler resolves it without the page's base — so it names
+      the Pages origin rather than being rewritten like the icons above.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="VT-AC" />
+    <meta property="og:title" content="VT-AC — a fantasy VT terminal" />
+    <meta
+      property="og:description"
+      content="A VT terminal that could have existed, but did not — 80 columns, VT-100/ANSI, a CP437 glyph ROM and a 256-colour RGB332 framebuffer."
+    />
+    <meta property="og:url" content="https://acwright.github.io/VT-AC/" />
+    <meta property="og:image" content="https://acwright.github.io/VT-AC/og-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="VT-AC in 80-column VT-100 mode" />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <div id="app"></div>

@@ -1,4 +1,4 @@
-import { VTAC } from './VTAC'
+import { VTAC } from '@core/VTAC'
 
 const pixelIndex = (col: number, row: number, x = 0, y = 0) => {
   return (row * 8 + y) * VTAC.WIDTH + (col * 8 + x)

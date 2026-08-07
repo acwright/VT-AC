@@ -1,0 +1,51 @@
+@import 'tailwindcss';
+
+/* ── DEC VT design tokens (PLAN.md §2) ──────────────────────────────────────
+ *
+ * DEC beige enclosure + green phosphor screen. Components read these tokens,
+ * never literals. Screen *contents* are never themed — foreground and
+ * background there are protocol state (0x18/0x19, or SGR).
+ */
+:root {
+  /* Screen — the glass */
+  --vt-screen: #0a0f0a; /* app background, canvas letterbox */
+  --vt-phosphor: #33ff66; /* primary green: active text, icons, focus */
+  --vt-phosphor-dim: #1a6b33; /* inactive icons, disabled controls */
+  --vt-phosphor-hi: #a8ffc4; /* hover / active highlight */
+
+  /* Enclosure — the DEC VT100 case */
+  --vt-bezel: #c8bfa8; /* beige/putty: icon shell, web page frame */
+  --vt-bezel-dark: #9a9078; /* bezel shading */
+  --vt-trim: #6e675a; /* borders, control-bar separators */
+
+  /* Chrome — panels and controls */
+  --vt-panel: #141712; /* settings panel background */
+  --vt-panel-line: #2a3326; /* dividers, field borders */
+  --vt-text: #c9d6c9; /* body text on panel */
+  --vt-text-dim: #6b786b; /* section headings, labels */
+
+  /* Status */
+  --vt-amber: #ffb000; /* warnings, connecting */
+  --vt-red: #e5484d; /* errors, disconnect actions */
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--vt-screen);
+  color: var(--vt-text);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+button {
+  outline: none;
+}

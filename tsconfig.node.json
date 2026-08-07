@@ -1,0 +1,27 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": [
+    "electron.vite.config.*",
+    "vite.web.config.*",
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/shared/**/*",
+    "src/core/**/*"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "moduleResolution": "bundler",
+    "types": ["electron-vite/node"],
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["src/core/*"],
+      "@shared/*": ["src/shared/*"]
+    },
+    // src/core is shared with tsconfig.core.json (Jest) and tsconfig.cli.json,
+    // neither of which enables these. The terminal core is written against its
+    // own project's rules; main reaching into it to typecheck should not
+    // retroactively demand a cleanup of code that already compiles correctly.
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  }
+}

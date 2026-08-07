@@ -4,10 +4,14 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Build output
+# Build output (electron-vite compile + electron-builder distributables)
 dist/
-build/
 out/
+
+# TypeScript incremental build cache (composite project references)
+*.tsbuildinfo
+
+# The build/ dir holds electron-builder resources (icons, source PNG) — tracked.
 
 # Environment files
 .env

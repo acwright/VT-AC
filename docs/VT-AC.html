@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VT-AC Commands</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   VT-AC COMMAND REFERENCE CARD
+   Source of truth for the printable card. Replaces docs/VT-AC.numbers.
+
+   Regenerate the PDF:
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+       --headless --disable-gpu --no-pdf-header-footer \
+       --print-to-pdf=docs/VT-AC.pdf docs/VT-AC.html
+
+   Screen renders in the DEC green-phosphor scheme; print drops to black ink
+   on white, which is what a reference card pinned above a bench needs.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --screen:      #0A0F0A;
+  --phosphor:    #33FF66;
+  --phosphor-dim:#1A6B33;
+  --phosphor-hi: #A8FFC4;
+  --bezel:       #C8BFA8;
+  --trim:        #6E675A;
+  --panel:       #141712;
+  --panel-line:  #2A3326;
+  --text:        #C9D6C9;
+  --text-dim:    #6B786B;
+  --amber:       #FFB000;
+
+  /* Roles the card actually paints with — remapped wholesale for print. */
+  --page-bg:     var(--screen);
+  --sheet:       var(--panel);
+  --rule:        var(--panel-line);
+  --rule-strong: var(--trim);
+  --head-bg:     #000;
+  --head-fg:     var(--phosphor);
+  --key-bg:      #000;
+  --key-fg:      var(--phosphor);
+  --body-fg:     var(--text);
+  --muted-fg:    var(--text-dim);
+  --accent:      var(--phosphor);
+  --zebra:       rgba(255,255,255,.022);
+
+  --sans: "Helvetica Neue", "Helvetica", "Arial Narrow", Arial, system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--page-bg); }
+
+body {
+  margin: 0;
+  padding: 24px 16px 64px;
+  background: var(--page-bg);
+  color: var(--body-fg);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+}
+
+.sheet {
+  max-width: 8.5in;
+  margin: 0 auto;
+  padding: 0.42in 0.44in 0.5in;
+  background: var(--sheet);
+  border: 1px solid var(--rule-strong);
+}
+
+/* ── Masthead ──────────────────────────────────────────────────────────── */
+
+.masthead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+  border-bottom: 2px solid var(--rule-strong);
+}
+
+h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+  font-stretch: semi-condensed;
+  color: var(--accent);
+}
+
+.masthead .sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted-fg);
+  text-align: right;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+/* ── Section headings ──────────────────────────────────────────────────── */
+
+section { margin-top: 20px; }
+section:first-of-type { margin-top: 0; }
+
+h2 {
+  margin: 0 0 7px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--muted-fg);
+}
+
+.lede {
+  margin: -3px 0 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted-fg);
+  max-width: 62em;
+}
+
+/* ── Tables ────────────────────────────────────────────────────────────── */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+thead { display: table-header-group; }
+tr    { break-inside: avoid; page-break-inside: avoid; }
+
+th {
+  background: var(--head-bg);
+  color: var(--head-fg);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 6px 7px;
+  border: 1px solid var(--head-bg);
+  white-space: nowrap;
+}
+
+td {
+  padding: 4.5px 7px;
+  border: 1px solid var(--rule);
+  vertical-align: middle;
+}
+
+/* Zebra must not reach the inverted key cells — `tbody tr:nth-child(even) td`
+   out-specifies `td.key`, so without the :not() the black cells lose their
+   background and their white text vanishes on white paper. */
+tbody tr:nth-child(even) td:not(.key):not(.oct) { background: var(--zebra); }
+
+/* The hex key column — inverted, as on the original card. */
+td.key {
+  background: var(--key-bg);
+  color: var(--key-fg);
+  border-color: var(--key-bg);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  width: 8ch;
+}
+
+td.dec {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: center;
+  color: var(--muted-fg);
+  white-space: nowrap;
+  width: 7ch;
+}
+
+td.name {
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  font-stretch: semi-condensed;
+  white-space: nowrap;
+}
+
+td.flag, td.len {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+td.flag { width: 12ch; color: var(--accent); }
+td.len  { width: 9ch; }
+
+td.notes {
+  font-size: 11px;
+  color: var(--muted-fg);
+  line-height: 1.4;
+}
+
+/* Inline bits inside notes */
+code {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--body-fg);
+  white-space: nowrap;
+}
+
+.def {
+  display: inline-block;
+  margin-left: .5em;
+  padding: 0 .45em;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--muted-fg);
+  white-space: nowrap;
+}
+
+.new {
+  display: inline-block;
+  margin-left: .5em;
+  padding: 0 .4em;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--page-bg);
+  background: var(--accent);
+  border-radius: 2px;
+  vertical-align: 1px;
+}
+
+/* ── Bell frequency grid ───────────────────────────────────────────────── */
+
+table.bell { font-size: 10px; table-layout: fixed; }
+table.bell th { padding: 4px 2px; font-size: 8.5px; letter-spacing: .04em; }
+table.bell td {
+  font-family: var(--mono);
+  text-align: center;
+  padding: 3.5px 2px;
+  letter-spacing: .02em;
+}
+table.bell td.oct {
+  background: var(--key-bg);
+  color: var(--key-fg);
+  border-color: var(--key-bg);
+  font-weight: 700;
+}
+table.bell td.mark { color: var(--accent); font-weight: 700; }
+table.bell col.sharp { background: rgba(0,0,0,.16); }
+
+/* ── Two-up rows ───────────────────────────────────────────────────────── */
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────── */
+
+footer {
+  margin-top: 22px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted-fg);
+}
+footer a { color: var(--muted-fg); }
+
+/* ═══ PRINT ════════════════════════════════════════════════════════════════
+   Ink on paper. The screen palette is dropped entirely — a bench card gets
+   photocopied, faxed and scribbled on, and none of that survives green-on-
+   black. Layout, column widths and the inverted key column all carry over. */
+
+@page {
+  size: letter portrait;
+  margin: 0.5in;
+}
+
+@media print {
+  :root {
+    --page-bg:     #fff;
+    --sheet:       #fff;
+    --rule:        #c9c9c9;
+    --rule-strong: #000;
+    --head-bg:     #000;
+    --head-fg:     #fff;
+    --key-bg:      #000;
+    --key-fg:      #fff;
+    --body-fg:     #000;
+    --muted-fg:    #333;
+    --accent:      #000;
+    --zebra:       transparent;
+  }
+
+  body { padding: 0; font-size: 9.5pt; }
+
+  .sheet {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  h1 { font-size: 20pt; }
+  table { font-size: 7.6pt; }
+  th { font-size: 6.6pt; padding: 4px 5px; }
+  td { padding: 3px 5px; }
+  td.key, td.dec, td.flag, td.len { font-size: 7.4pt; }
+  td.notes { font-size: 7.2pt; color: #000; }
+  .def { font-size: 6.4pt; color: #333; border-color: #999; }
+  .new { display: none; }              /* "NEW" badges are a v2 diff aid, not reference material */
+  table.bell { font-size: 6.8pt; }
+  table.bell th { font-size: 5.8pt; }
+  /* --accent collapses to black in print, so the highlighted notes would read
+     as nothing more than bold. Underline carries the cue onto paper. */
+  table.bell td.mark { text-decoration: underline; text-underline-offset: 2px; }
+  .lede { font-size: 7.4pt; color: #333; }
+  footer { font-size: 6.6pt; color: #333; }
+
+  section { break-inside: avoid; page-break-inside: avoid; }
+  section.long { break-inside: auto; page-break-inside: auto; }
+  .page-break { break-before: page; page-break-before: always; }
+}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="masthead">
+    <h1>VT-AC Commands</h1>
+    <div class="sub">
+      A.C. Wright Design<br>
+      Version 2.0.0 &nbsp;·&nbsp; Native personality
+    </div>
+  </div>
+
+  <!-- ── Control codes ──────────────────────────────────────────────────── -->
+  <section class="long">
+    <h2>Control Codes &nbsp;·&nbsp; $00–$1F</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Hex</th>
+          <th>Dec</th>
+          <th>Description</th>
+          <th>Std ASCII</th>
+          <th># Bytes</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="key">00</td><td class="dec">0</td><td class="name">Null</td><td class="flag">Yes</td><td class="len">1</td><td class="notes">No operation</td></tr>
+        <tr><td class="key">01</td><td class="dec">1</td><td class="name">Cursor Home</td><td class="flag">Yes</td><td class="len">1</td><td class="notes">Move cursor to <code>0,0</code></td></tr>
+        <tr><td class="key">02</td><td class="dec">2</td><td class="name">Cursor Character</td><td class="flag"></td><td class="len">2</td><td class="notes">2nd byte is the cursor character, or <code>$00</code> to turn off<span class="def">Default off</span></td></tr>
+        <tr><td class="key">03</td><td class="dec">3</td><td class="name">Cursor Mode</td><td class="flag"></td><td class="len">1</td><td class="notes">Toggle solid / blinking<span class="def">Default solid</span></td></tr>
+        <tr><td class="key">04</td><td class="dec">4</td><td class="name">Reset</td><td class="flag"></td><td class="len">1</td><td class="notes">Text mode, clear screen, cursor home / off / solid, BG <code>$00</code>, FG <code>$FF</code></td></tr>
+        <tr><td class="key">05</td><td class="dec">5</td><td class="name">Bell Duration</td><td class="flag"></td><td class="len">2</td><td class="notes">2nd byte is duration in jiffies (1&frasl;60 s)<span class="def">Default $3C</span></td></tr>
+        <tr><td class="key">06</td><td class="dec">6</td><td class="name">Bell Frequency</td><td class="flag"></td><td class="len">2</td><td class="notes">2nd byte is a note index — see Bell Frequencies<span class="def">Default $3D</span></td></tr>
+        <tr><td class="key">07</td><td class="dec">7</td><td class="name">Bell</td><td class="flag">Yes</td><td class="len">1</td><td class="notes">Queue one bell at the current duration and frequency</td></tr>
+        <tr><td class="key">08</td><td class="dec">8</td><td class="name">Backspace</td><td class="flag">Yes</td><td class="len">1</td><td class="notes">Cursor left one column; stops at column 0</td></tr>
+        <tr><td class="key">09</td><td class="dec">9</td><td class="name">Tab</td><td class="flag">Yes</td><td class="len">1</td><td class="notes">Advance to the next 4-column stop</td></tr>
+        <tr><td class="key">0A</td><td class="dec">10</td><td class="name">Line Feed</td><td class="flag">Yes</td><td class="len">1</td><td class="notes">Cursor down, same column; scrolls up at the last row</td></tr>
+        <tr><td class="key">0B</td><td class="dec">11</td><td class="name">Screen Mode</td><td class="flag"></td><td class="len">1</td><td class="notes">Toggle text / graphics<span class="def">Default text</span></td></tr>
+        <tr><td class="key">0C</td><td class="dec">12</td><td class="name">Clear Screen</td><td class="flag">Yes</td><td class="len">1</td><td class="notes">Fill the screen with the background color</td></tr>
+        <tr><td class="key">0D</td><td class="dec">13</td><td class="name">Carriage Return</td><td class="flag">Yes</td><td class="len">1</td><td class="notes">Cursor to column 0, same row</td></tr>
+        <tr><td class="key">0E</td><td class="dec">14</td><td class="name">Set Column</td><td class="flag"></td><td class="len">2</td><td class="notes">2nd byte is the column, taken modulo the column count — <code>0–39</code> at 40, <code>0–79</code> at 80<span class="def">Default 0</span></td></tr>
+        <tr><td class="key">0F</td><td class="dec">15</td><td class="name">Set Row</td><td class="flag"></td><td class="len">2</td><td class="notes">2nd byte is the row, taken modulo the row count — <code>0–29</code> at 40, <code>0–59</code> at 80<span class="def">Default 0</span></td></tr>
+        <tr><td class="key">10</td><td class="dec">16</td><td class="name">Delete to SoL</td><td class="flag"></td><td class="len">1</td><td class="notes">Clear from the start of the line through the cursor</td></tr>
+        <tr><td class="key">11</td><td class="dec">17</td><td class="name">Delete to EoL</td><td class="flag"></td><td class="len">1</td><td class="notes">Clear from the cursor to the end of the line</td></tr>
+        <tr><td class="key">12</td><td class="dec">18</td><td class="name">Delete to SoS</td><td class="flag"></td><td class="len">1</td><td class="notes">Clear from the start of the screen through the cursor</td></tr>
+        <tr><td class="key">13</td><td class="dec">19</td><td class="name">Delete to EoS</td><td class="flag"></td><td class="len">1</td><td class="notes">Clear from the cursor to the end of the screen</td></tr>
+        <tr><td class="key">14</td><td class="dec">20</td><td class="name">Scroll Left</td><td class="flag"></td><td class="len">1</td><td class="notes">Vacated column filled with the background color</td></tr>
+        <tr><td class="key">15</td><td class="dec">21</td><td class="name">Scroll Right</td><td class="flag"></td><td class="len">1</td><td class="notes">Vacated column filled with the background color</td></tr>
+        <tr><td class="key">16</td><td class="dec">22</td><td class="name">Scroll Up</td><td class="flag"></td><td class="len">1</td><td class="notes">Vacated row filled with the background color</td></tr>
+        <tr><td class="key">17</td><td class="dec">23</td><td class="name">Scroll Down</td><td class="flag"></td><td class="len">1</td><td class="notes">Vacated row filled with the background color</td></tr>
+        <tr><td class="key">18</td><td class="dec">24</td><td class="name">Foreground Color</td><td class="flag"></td><td class="len">2</td><td class="notes">2nd byte is RGB332 color data<span class="def">Default $FF white</span></td></tr>
+        <tr><td class="key">19</td><td class="dec">25</td><td class="name">Background Color</td><td class="flag"></td><td class="len">2</td><td class="notes">2nd byte is RGB332 color data<span class="def">Default $00 black</span></td></tr>
+        <tr><td class="key">1A</td><td class="dec">26</td><td class="name">Next Byte as Data</td><td class="flag"></td><td class="len">2</td><td class="notes">Lets <code>$00–$1F</code> and <code>$7F</code> be interpreted as data rather than command</td></tr>
+        <tr><td class="key">1B</td><td class="dec">27</td><td class="name">ESC</td><td class="flag">Yes</td><td class="len">2</td><td class="notes">Introduces a two-byte extension — see ESC Extensions<span class="new">v2</span></td></tr>
+        <tr><td class="key">1C</td><td class="dec">28</td><td class="name">Cursor Left</td><td class="flag"></td><td class="len">1</td><td class="notes">Stops at column 0</td></tr>
+        <tr><td class="key">1D</td><td class="dec">29</td><td class="name">Cursor Right</td><td class="flag"></td><td class="len">1</td><td class="notes">Stops at the last column</td></tr>
+        <tr><td class="key">1E</td><td class="dec">30</td><td class="name">Cursor Up</td><td class="flag"></td><td class="len">1</td><td class="notes">Stops at row 0</td></tr>
+        <tr><td class="key">1F</td><td class="dec">31</td><td class="name">Cursor Down</td><td class="flag"></td><td class="len">1</td><td class="notes">Stops at the last row</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ── Character ranges ───────────────────────────────────────────────── -->
+  <section>
+    <h2>Character Data &nbsp;·&nbsp; $20–$FF</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Hex</th>
+          <th>Dec</th>
+          <th>Description</th>
+          <th>Std ASCII</th>
+          <th># Bytes</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="key">20–7E</td><td class="dec">32–126</td><td class="name">ASCII Characters</td><td class="flag">Yes</td><td class="len">1</td><td class="notes">See ASCII chart</td></tr>
+        <tr><td class="key">7F</td><td class="dec">127</td><td class="name">Delete</td><td class="flag">Yes</td><td class="len">1</td><td class="notes">Clear the cell at the cursor</td></tr>
+        <tr><td class="key">80–FF</td><td class="dec">128–255</td><td class="name">Extended Characters</td><td class="flag"></td><td class="len">1</td><td class="notes">CP437 upper range — see character set</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ── ESC extensions + geometry ──────────────────────────────────────── -->
+  <section class="page-break">
+    <h2>ESC Extensions &nbsp;·&nbsp; $1B + 1 byte <span class="new">v2</span></h2>
+    <p class="lede">
+      v1.3.0 reserved <code>$1B</code> for future escape codes and treated it as
+      a no-op. It is now the introducer for two-byte extensions. An unrecognised
+      second byte is discarded, which preserves the old no-op behavior for any
+      stream that carried a stray ESC.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Sequence</th>
+          <th>Description</th>
+          <th># Bytes</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="key">1B 01</td><td class="name">40-Column Mode</td><td class="len">2</td><td class="notes">320 × 240 pixels, 40 × 30 cells. Clears the screen and homes the cursor<span class="def">Default</span></td></tr>
+        <tr><td class="key">1B 02</td><td class="name">80-Column Mode</td><td class="len">2</td><td class="notes">640 × 480 pixels, 80 × 60 cells. Clears the screen and homes the cursor</td></tr>
+        <tr><td class="key">1B 03</td><td class="name">VT-100 Personality</td><td class="len">2</td><td class="notes">Hand the stream to the ANSI / VT-100 parser</td></tr>
+        <tr><td class="key">1B 04</td><td class="name">Query</td><td class="len">2</td><td class="notes">Reply on the serial link with personality, columns and rows</td></tr>
+        <tr><td class="key">1B 1B</td><td class="name">Literal ESC</td><td class="len">2</td><td class="notes">Emit <code>$1B</code> as data</td></tr>
+        <tr><td class="key">1B ✽</td><td class="name">Ignored</td><td class="len">2</td><td class="notes">Any other second byte is discarded</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <div class="split">
+      <div>
+        <h2>Screen Geometry <span class="new">v2</span></h2>
+        <table>
+          <thead>
+            <tr><th>Mode</th><th>Pixels</th><th>Cells</th><th>Cell</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="name">40-Column</td><td class="dec">320 × 240</td><td class="dec">40 × 30</td><td class="dec">8 × 8</td></tr>
+            <tr><td class="name">80-Column</td><td class="dec">640 × 480</td><td class="dec">80 × 60</td><td class="dec">8 × 8</td></tr>
+          </tbody>
+        </table>
+        <p class="lede" style="margin-top:8px">
+          An exact 2× of the 40-column grid in both axes — same 8 × 8 font,
+          square pixels, 4:3 aspect, and 8 rows per cell in graphics mode.
+        </p>
+      </div>
+      <div>
+        <h2>Personalities <span class="new">v2</span></h2>
+        <table>
+          <thead>
+            <tr><th>Mode</th><th>Protocol</th><th>Enter</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="name">Native</td><td class="notes">This card<span class="def">Default</span></td><td class="dec">ESC[?7000h</td></tr>
+            <tr><td class="name">VT-100</td><td class="notes">ANSI / VT-100</td><td class="dec">1B 03</td></tr>
+          </tbody>
+        </table>
+        <p class="lede" style="margin-top:8px">
+          Native is byte-for-byte v1.3.0 plus the ESC extensions above. VT-100
+          mode is documented separately — see the README.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Bell frequencies ───────────────────────────────────────────────── -->
+  <section>
+    <h2>Bell Frequencies &nbsp;·&nbsp; 2nd byte of $06</h2>
+    <p class="lede">
+      Note index <code>$01</code>–<code>$54</code>, C1 through B7. Any value
+      outside that range silences the bell, as does a duration of <code>$00</code>.
+      Default is <code>$3D</code> — C6, 1046.50 Hz.
+    </p>
+    <table class="bell">
+      <colgroup>
+        <col style="width:5ch"><col><col class="sharp"><col><col class="sharp"><col><col>
+        <col class="sharp"><col><col class="sharp"><col><col class="sharp"><col>
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Oct</th>
+          <th>C</th><th>C♯</th><th>D</th><th>D♯</th><th>E</th><th>F</th>
+          <th>F♯</th><th>G</th><th>G♯</th><th>A</th><th>A♯</th><th>B</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="oct">1</td><td>01</td><td>02</td><td>03</td><td>04</td><td>05</td><td>06</td><td>07</td><td>08</td><td>09</td><td>0A</td><td>0B</td><td>0C</td></tr>
+        <tr><td class="oct">2</td><td>0D</td><td>0E</td><td>0F</td><td>10</td><td>11</td><td>12</td><td>13</td><td>14</td><td>15</td><td>16</td><td>17</td><td>18</td></tr>
+        <tr><td class="oct">3</td><td>19</td><td>1A</td><td>1B</td><td>1C</td><td>1D</td><td>1E</td><td>1F</td><td>20</td><td>21</td><td>22</td><td>23</td><td>24</td></tr>
+        <tr><td class="oct">4</td><td>25</td><td>26</td><td>27</td><td>28</td><td>29</td><td>2A</td><td>2B</td><td>2C</td><td>2D</td><td class="mark">2E</td><td>2F</td><td>30</td></tr>
+        <tr><td class="oct">5</td><td>31</td><td>32</td><td>33</td><td>34</td><td>35</td><td>36</td><td>37</td><td>38</td><td>39</td><td>3A</td><td>3B</td><td>3C</td></tr>
+        <tr><td class="oct">6</td><td class="mark">3D</td><td>3E</td><td>3F</td><td>40</td><td>41</td><td>42</td><td>43</td><td>44</td><td>45</td><td>46</td><td>47</td><td>48</td></tr>
+        <tr><td class="oct">7</td><td>49</td><td>4A</td><td>4B</td><td>4C</td><td>4D</td><td>4E</td><td>4F</td><td>50</td><td>51</td><td>52</td><td>53</td><td>54</td></tr>
+      </tbody>
+    </table>
+    <p class="lede" style="margin-top:7px">
+      Highlighted: <code>$2E</code> A4 = 440.00 Hz &nbsp;·&nbsp;
+      <code>$3D</code> C6 = 1046.50 Hz (default).
+      Duration is in jiffies — <code>$3C</code> = 60 = one second.
+    </p>
+  </section>
+
+  <footer>
+    <span>VT-AC &nbsp;·&nbsp; A fantasy VT terminal &nbsp;·&nbsp; A.C. Wright Design</span>
+    <span>github.com/acwright/VT-AC</span>
+  </footer>
+
+</div>
+</body>
+</html>

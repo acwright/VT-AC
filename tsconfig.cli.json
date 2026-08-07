@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "outDir": "out",
+    "rootDir": "src",
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["src/core/*"],
+      "@shared/*": ["src/shared/*"]
+    }
+  },
+  // Of src/shared, only what a windowed launch has to agree on: the boot
+  // config and the app settings it can set. The rest is Electron's side of
+  // the app, which the CLI never loads.
+  "include": ["src/cli/**/*", "src/core/**/*", "src/shared/boot.ts", "src/shared/types.ts"]
+}

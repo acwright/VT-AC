@@ -1,11 +1,21 @@
 #! /usr/bin/env node
 
+// ─────────────────────────────────────────────────────────────────────────────
+// v1.3.0's SDL entry point. Frozen, and deliberately not built any more: it is
+// in no tsconfig, and `@kmamal/sdl` is gone from package.json (PLAN.md Phase 0).
+//
+// It stays on disk through Phase 8 as the reference for what the host used to
+// do for the core — the keymap (lines ~116-171), the cursor overlay (~258-275)
+// and the bell semantics all get lifted out of here in Phases 1 and 3. Phase 8
+// deletes it, along with src/lib.ts.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import figlet from 'figlet'
 import { Command } from 'commander'
 import { readFileSync } from 'fs'
 import sdl from '@kmamal/sdl'
 import { SerialPort } from 'serialport'
-import { VTAC } from './VTAC/VTAC'
+import { VTAC } from './core/VTAC'
 
 const VERSION = '1.3.0'
 

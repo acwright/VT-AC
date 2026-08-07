@@ -55,11 +55,22 @@ try {
   const coreDir = join(ROOT, 'src', 'core')
   mkdirSync(join(work, 'core'), { recursive: true })
 
-  for (const entry of readdirSync(coreDir)) {
-    if (!entry.endsWith('.ts')) continue
-    const source = readFileSync(join(coreDir, entry), 'utf8')
-    writeFileSync(join(work, 'core', entry.replace(/\.ts$/, '.js')), transpile(source, entry))
+  // Recursive, because the core grew subdirectories in Phase 5 — `ansi/` now,
+  // and whatever a later personality needs. The tree is mirrored rather than
+  // flattened so the transpiled `require('./ansi/Dispatch')` still resolves.
+  const transpileTree = (from, to) => {
+    mkdirSync(to, { recursive: true })
+    for (const entry of readdirSync(from, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        transpileTree(join(from, entry.name), join(to, entry.name))
+        continue
+      }
+      if (!entry.name.endsWith('.ts')) continue
+      const source = readFileSync(join(from, entry.name), 'utf8')
+      writeFileSync(join(to, entry.name.replace(/\.ts$/, '.js')), transpile(source, entry.name))
+    }
   }
+  transpileTree(coreDir, join(work, 'core'))
 
   const reference = execFileSync('git', ['show', `${REF}:src/core/VTAC.ts`], {
     cwd: ROOT,

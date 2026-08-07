@@ -264,8 +264,22 @@ describe('ESC extensions', () => {
     feed(vtac, 0x1b, 0x04)
     expect(sent).toEqual([[0x1b, 0x04, 0x00, 40, 30]])
 
-    feed(vtac, 0x1b, 0x02, 0x1b, 0x03, 0x1b, 0x04)
-    expect(sent[1]).toEqual([0x1b, 0x04, 0x01, 80, 60])
+    feed(vtac, 0x1b, 0x02, 0x1b, 0x04)
+    expect(sent[1]).toEqual([0x1b, 0x04, 0x00, 80, 60])
+  })
+
+  it('cannot be queried once the stream is in VT-100 mode', () => {
+    // The query is a *native* extension: after `ESC 0x03` the stream belongs to
+    // the ANSI parser, which reads `ESC 0x04` as an escape followed by a C0
+    // control and answers neither. Which is the whole reason `CSI ? 7000 h`
+    // exists — see `ansi/personality.test.ts`.
+    const vtac = new VTAC()
+    const sent: number[][] = []
+    vtac.setTransmitCallback((bytes) => sent.push(bytes))
+
+    feed(vtac, 0x1b, 0x03, 0x1b, 0x04)
+
+    expect(sent).toEqual([])
   })
 
   it('drops a query on the floor when nothing has claimed the wire', () => {

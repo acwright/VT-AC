@@ -406,6 +406,37 @@ per cell in both; the framebuffer is 640×480 after switching.
 
 **Goal:** `vi`, `htop`, and ncurses render correctly over a serial link.
 
+### Staging
+
+This phase is roughly the size of 0–4 combined, so it lands in stages. Each is
+its own commit and leaves the suite green; the sections below are the reference
+material they draw on, not the order of work.
+
+| Stage | Work | Draws on | Status |
+| --- | --- | --- | --- |
+| **5.1** | Personality routing + the ANSI state machine | §5.1, §5.2 | **done** |
+| 5.2 | `Screen` operations ANSI needs: scroll regions, IL/DL/ICH/DCH/ECH | — | |
+| 5.3 | CSI dispatch: cursor, erase, edit, DECSTBM | §5.3 | |
+| 5.4 | SGR and colour, through `XTERM256_TO_RGB332` | §5.3 | |
+| 5.5 | Modes: DECSET/DECRST, deferred last-column wrap, alt screen | §5.3 | |
+| 5.6 | Charsets, tab stops, reports, RIS | §5.3 | |
+| 5.7 | Keyboard, settings, control bar, store wiring | §5.4 | |
+| 5.8 | `vttest` conformance run, real software, `VT100-CONFORMANCE.md` | §5.5 | |
+
+5.1 is the substrate: `src/core/ansi/StateMachine.ts` transcribed from the
+published table, `Dispatch.ts` handling only what a personality switch needs to
+be usable and reversible (graphic characters, the five C0 controls a VT-100
+acts on, RIS, and DECSET 7000), and `VTAC.parse` routing on `personality`.
+Everything else is ignored, which is what a terminal does with a sequence it
+does not know. `ESC [ ? 7000 h` is confirmed clear: xterm's `ctlseqs` documents
+nothing above 2006, DEC's own private modes are all below 100, and the other
+squatters sit at 1000–1016, 2004 and mintty's 7700s.
+
+One consequence worth recording: routing on personality makes `ESC 0x04`
+unreachable from `vt100`, so the query's personality byte always reads `00`.
+The card and `queryResponse` now say so, and DECRQM on mode 7000 (stage 5.5) is
+the VT-100-side way to ask the same question.
+
 ### 5.1 Personalities
 
 ```ts

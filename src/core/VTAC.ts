@@ -1,5 +1,7 @@
 import { CHARACTERS } from './Font'
 import { Screen } from './Screen'
+import { createAnsiParser } from './ansi/Dispatch'
+import type { AnsiParser } from './ansi/StateMachine'
 import type { Personality } from './types'
 
 /** The two geometries VT-AC offers, keyed by column count. */
@@ -31,6 +33,17 @@ export class VTAC {
    * `screen.takeDamage()` directly; `buffer` is for everything that predates it.
    */
   readonly screen: Screen = new Screen(VTAC.COLUMNS, VTAC.ROWS)
+
+  /**
+   * The VT-100 parser, and where `parse` sends bytes while the personality is
+   * `vt100`.
+   *
+   * Built with the terminal rather than on demand: it is a state machine over a
+   * few dozen bytes of parameter storage, and a personality can change from
+   * inside the byte stream, so there is no moment where allocating it would be
+   * cheaper than having it.
+   */
+  readonly ansi: AnsiParser = createAnsiParser(this)
 
   private bufferView: Buffer<ArrayBuffer> | null = null
   private bufferSource: Uint8Array | null = null
@@ -187,9 +200,38 @@ export class VTAC {
     this.offset = 0
   }
 
-  /** Switch personality. Phase 5 is what makes `vt100` parse differently. */
+  /**
+   * Switch personality — which of the two protocols `parse` reads.
+   *
+   * Both parsers are dropped back to their ground state on the way through.
+   * Neither one should inherit the other's half-finished sequence: a switch
+   * arriving between `0x18` (FOREGROUND COLOR) and its operand, or in the
+   * middle of a CSI, would otherwise leave a stray byte to be read as the wrong
+   * thing entirely.
+   */
   setPersonality = (personality: Personality) => {
+    if (personality === this.personality) return
     this.personality = personality
+    this.clearPendingBytes()
+    this.ansi.reset()
+  }
+
+  /**
+   * Drop any native-mode command waiting on its operand byte.
+   *
+   * Not `reset()` — nothing on screen changes and no colour, cursor or bell
+   * setting is touched. This only forgets that a byte was expected.
+   */
+  private clearPendingBytes = () => {
+    this.columnNextByte = false
+    this.rowNextByte = false
+    this.cursorCharNextByte = false
+    this.foregroundColorNextByte = false
+    this.backgroundColorNextByte = false
+    this.bellDurationNextByte = false
+    this.bellFrequencyNextByte = false
+    this.dataNextByte = false
+    this.escapeNextByte = false
   }
 
   reset = () => {
@@ -212,6 +254,7 @@ export class VTAC {
     this.bellFrequencyNextByte = false
     this.escapeNextByte = false
     this.bellQueue = []
+    this.ansi.reset()
 
     // Back to the *configured* defaults, not to hard-coded ones: someone who
     // launched `vtac --columns 80 --mode vt100` is running an 80-column VT-100,
@@ -442,6 +485,14 @@ export class VTAC {
    * as a mode index, so a host can size its output without a lookup table and
    * without this becoming a compatibility problem if a third geometry ever
    * appears.
+   *
+   * **The personality byte always reads `00`.** The query is a native-mode
+   * extension, so a terminal in `vt100` never reaches it: the ANSI parser takes
+   * `ESC 0x04` as an escape followed by a C0 control and answers nothing. The
+   * byte stays because a reply that does not say what it is describing ages
+   * badly, and because it is what tells a host its `CSI ? 7000 h` landed. Asking
+   * the same question from the VT-100 side is DECRQM on mode 7000, which
+   * arrives with the rest of the mode handling.
    */
   queryResponse = (): number[] => {
     return [
@@ -470,6 +521,21 @@ export class VTAC {
   //
 
   parse = (data: number) => {
+    // The personality switch, and the only place it is read. `vt100` hands the
+    // whole stream to the ANSI state machine, which calls back into the same
+    // drawing methods the native path below uses — so the two personalities
+    // share a screen, a cursor and a bell, and differ only in what they read a
+    // byte to mean.
+    //
+    // Ahead of the pending-operand checks because a personality never changes
+    // with a native command half-read: `setPersonality` clears them, and the
+    // one native byte that can switch personalities (`ESC 0x03`) is itself the
+    // operand it was waiting for.
+    if (this.personality === 'vt100') {
+      this.ansi.parse(data)
+      return
+    }
+
     // First, because `escape` may re-dispatch the byte through here and the
     // flag has to be down by then or an unrecognised sequence would loop.
     if (this.escapeNextByte) {

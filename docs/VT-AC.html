@@ -459,10 +459,11 @@ footer a { color: var(--muted-fg); }
       </tbody>
     </table>
     <p class="lede" style="margin-top:8px">
-      The query reply is five bytes — <code>1B 04</code>, then personality
-      (<code>00</code> native, <code>01</code> VT-100), then the column and row
-      counts as literal numbers: <code>1B 04 00 28 1E</code> for 40 × 30,
-      <code>1B 04 00 50 3C</code> for 80 × 60.
+      The query reply is five bytes — <code>1B 04</code>, then personality, then
+      the column and row counts as literal numbers: <code>1B 04 00 28 1E</code>
+      for 40 × 30, <code>1B 04 00 50 3C</code> for 80 × 60. Personality always
+      reads <code>00</code> (native): the query is itself a native extension, so
+      a terminal in VT-100 mode never reaches it.
     </p>
   </section>
 
@@ -497,7 +498,10 @@ footer a { color: var(--muted-fg); }
         </table>
         <p class="lede" style="margin-top:8px">
           Native is byte-for-byte v1.3.0 plus the ESC extensions above. VT-100
-          mode is documented separately — see the README.
+          mode is documented separately — see the README. Each personality is
+          left by a sequence the <em>other</em> one cannot express, so neither is
+          a one-way door. <code>ESC c</code> (RIS) returns to whichever was
+          configured at launch.
         </p>
       </div>
     </div>

@@ -5,7 +5,7 @@
  */
 
 import { Attr, BLANK_CODE } from '@core/Cell'
-import { VTAC, VT100_CURSOR } from '@core/VTAC'
+import { VTAC } from '@core/VTAC'
 import { DecMode } from '@core/ansi/Modes'
 
 const CSI = '\x1b['
@@ -221,15 +221,34 @@ describe('DECTCEM — cursor visibility', () => {
 })
 
 describe('the cursor glyph', () => {
+  // `overlayCursor` draws its glyph *inverted*, so what is handed to it is the
+  // thing being reversed, not the shape being drawn. A full block would invert
+  // to pure background — an invisible cursor — which is exactly what happened
+  // before a screenshot of the running app caught it.
   it('is off by default in native mode, as v1 has it', () => {
     expect(new VTAC().cursorGlyph).toBe(0x00)
   })
 
-  it('is a block in VT-100 mode, which has no way to ask for one', () => {
-    const vtac = new VTAC()
-    vtac.setPersonality('vt100')
+  it('is the cell underneath in VT-100 mode, which has no way to ask for one', () => {
+    const { vtac, feed } = terminal()
 
-    expect(vtac.cursorGlyph).toBe(VT100_CURSOR)
+    // A blank cell: a space inverts to a solid block of foreground.
+    expect(vtac.cursorGlyph).toBe(BLANK_CODE)
+
+    // A written one: the character punched out of that block.
+    feed('A')
+    feed(`${CSI}1;1H`)
+    expect(vtac.cursorGlyph).toBe(0x41)
+  })
+
+  it('follows the cursor as it moves', () => {
+    const { vtac, feed } = terminal()
+
+    feed('AB')
+    feed(`${CSI}1;2H`)
+    expect(vtac.cursorGlyph).toBe(0x42)
+    feed(`${CSI}1;1H`)
+    expect(vtac.cursorGlyph).toBe(0x41)
   })
 
   it('keeps a glyph the host chose before switching', () => {

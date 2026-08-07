@@ -13,12 +13,6 @@ export const GEOMETRIES = {
 /** A column count `setColumns` accepts. */
 export type Columns = keyof typeof GEOMETRIES
 
-/**
- * The cursor a VT-100 shows when nothing has asked for another — CP437's full
- * block, which `overlayCursor` draws inverted into a solid rectangle.
- */
-export const VT100_CURSOR = 0xdb
-
 export class VTAC {
 
   /** @deprecated Instance geometry lives on `screen`; this is the 40-column default. */
@@ -164,18 +158,26 @@ export class VTAC {
   cursorVisible: boolean = true
 
   /**
-   * The glyph to draw as the cursor, or `0x00` for none.
+   * The glyph the renderer inverts to draw the cursor, or `0x00` for none.
    *
    * `cursorChar` defaults to OFF, which is v1's behaviour and right for a
    * terminal whose host chooses its cursor. A VT-100 does not work that way —
    * it has a block cursor and it is on — and an application like `vi` has no
    * native command available to ask for one. So in the `vt100` personality an
-   * unset cursor means the VT-100's own block, while a host that picked a glyph
-   * before switching keeps it.
+   * unset `cursorChar` means **the character already in the cell**.
+   *
+   * That is not a trick: `overlayCursor` draws its glyph inverted, set bits in
+   * the background colour and clear bits in the foreground. Handing it the
+   * cell's own character therefore paints the cell in reverse video, which is
+   * exactly what a VT100's block cursor is — solid over a blank cell, and the
+   * character punched out of a solid block over a written one. Handing it a
+   * `0xDB` full block would invert to a rectangle of pure *background*, which
+   * is to say nothing at all.
    */
   get cursorGlyph(): number {
     if (this.cursorChar !== 0x00) return this.cursorChar
-    return this.personality === 'vt100' ? VT100_CURSOR : 0x00
+    if (this.personality !== 'vt100') return 0x00
+    return this.screen.codes[this.screen.index(this.column, this.row)]
   }
 
   bellDuration: number = 0x3C // Duration in jiffies (1/60th of a second) (Default: 1 second)

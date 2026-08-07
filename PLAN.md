@@ -421,7 +421,7 @@ material they draw on, not the order of work.
 | **5.5** | Modes: DECSET/DECRST, alt screen | §5.3 | **done** |
 | **5.6** | Charsets, tab stops, reports, RIS | §5.3 | **done** |
 | **5.7** | Keyboard and store wiring | §5.4 | **done** |
-| 5.8 | `vttest` conformance run, real software, `VT100-CONFORMANCE.md` | §5.5 | |
+| 5.8 | `vttest` conformance run, real software, `VT100-CONFORMANCE.md` | §5.5 | **after Phase 6** |
 
 5.1 is the substrate: `src/core/ansi/StateMachine.ts` transcribed from the
 published table, `Dispatch.ts` handling only what a personality switch needs to
@@ -503,6 +503,24 @@ send an interrupt is not a terminal anyone can run `vi` or `htop` through, so
 in `vt100` Ctrl means what it means everywhere else — clear the top three bits,
 plus the named `@ [ \ ] ^ _ ?` forms. It is one of the places the two
 personalities deliberately part company.
+
+**5.8 is deliberately held until Phase 6 has landed.** The conformance gate is
+worth having only if it runs against the app the release ships — real
+`serialport`, real framing, the real renderer — and Phase 6 is what gives the
+app a port to open. Standing up a temporary harness to run `vttest` against the
+core alone would test a program nobody will use, and would have to be redone
+against the real one afterwards. Everything 5.8 needs is already in place; it
+waits on the plumbing, not on the terminal.
+
+**What a screenshot caught that 485 tests did not.** `overlayCursor` draws its
+glyph *inverted* — set bits take the background — so the CP437 full block 5.5
+chose as the VT-100 cursor inverted to a rectangle of pure background: an
+invisible cursor. The glyph handed to it is the thing being *reversed*, not the
+shape being drawn, so the right answer is the character already in the cell,
+which paints it in reverse video: solid over a blank cell, and the character
+punched out of a solid block over a written one. That is what a VT100's cursor
+is. Nothing in `src/core` could have noticed, which is the argument for driving
+the built app before calling a phase done.
 
 One consequence worth recording: routing on personality makes `ESC 0x04`
 unreachable from `vt100`, so the query's personality byte always reads `00`.

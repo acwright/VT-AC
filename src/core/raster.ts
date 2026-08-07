@@ -46,9 +46,14 @@ export function blitRGB332(
  *
  * "Inverted" is literal and is the whole of the cursor's appearance: a set bit
  * in the glyph takes the *background* colour and a clear bit takes the
- * *foreground*, so the block glyph v1 ships as the default cursor comes out as
- * a solid rectangle in the foreground colour with the character showing through
- * in reverse.
+ * *foreground*. So a glyph of mostly clear pixels comes out as mostly solid
+ * rectangle — a space inverts to a filled block, and the character already in
+ * the cell inverts to that same block with the character punched out of it,
+ * which is what a VT100's cursor looks like.
+ *
+ * The corollary is worth stating because it is the obvious mistake: passing
+ * CP437's *full block* `0xDB` inverts to a rectangle of pure background, which
+ * is to say an invisible cursor.
  *
  * This paints into the raster only, never into the plane. The cursor is not
  * screen content — nothing can read it back, a scroll must not carry it along,

@@ -14,6 +14,7 @@ module.exports = {
     '!src/main/index.ts'
   ],
   moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/renderer/src/$1',
     '^@core/(.*)$': '<rootDir>/src/core/$1',
     '^@shared/(.*)$': '<rootDir>/src/shared/$1'
   },

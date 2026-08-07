@@ -17,6 +17,7 @@ import { useTerminalStore } from '@/stores/terminal'
 import { useSerial } from '@/composables/useSerial'
 import { useBell } from '@/composables/useBell'
 import { useFullscreen } from '@/composables/useFullscreen'
+import { useSettings } from '@/services/settings'
 import type { SettingsSection } from '@/components/SettingsPanel.vue'
 
 /**
@@ -43,6 +44,7 @@ const store = useTerminalStore()
 const serial = useSerial()
 const { audioReady, muted, initAudio } = useBell()
 const fullscreen = useFullscreen()
+const settings = useSettings()
 
 // ── Files ────────────────────────────────────────────────────────────────────
 
@@ -142,7 +144,7 @@ async function toggleBell(): Promise<void> {
   } else {
     muted.value = !muted.value
   }
-  void window.api?.settings.set({ bellMuted: muted.value })
+  void settings.set({ bellMuted: muted.value })
 }
 </script>
 

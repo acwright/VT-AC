@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import type { Ref } from 'vue'
 import { useTerminalStore } from '@/stores/terminal'
 import { createSerialService } from '@/services/serial'
+import { useSettings } from '@/services/settings'
 import { DEFAULT_SERIAL_CONFIG } from '@shared/types'
 import type { PortInfo, SerialConfig, SerialStatus } from '@shared/types'
 
@@ -46,6 +47,7 @@ let shared: Serial | undefined
 function createSerial(): Serial {
   const store = useTerminalStore()
   const service = createSerialService()
+  const settings = useSettings()
 
   const status = ref<SerialStatus>('disconnected')
   const error = ref<string | null>(null)
@@ -134,7 +136,7 @@ function createSerial(): Serial {
       // owns port identity.
       if (portPath !== undefined) {
         port.value = portPath
-        void window.api?.settings.set({ lastPort: portPath })
+        void settings.set({ lastPort: portPath })
       }
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err)

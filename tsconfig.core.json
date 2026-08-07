@@ -13,6 +13,7 @@
     "types": ["node", "jest"],
     "baseUrl": ".",
     "paths": {
+      "@/*": ["src/renderer/src/*"],
       "@core/*": ["src/core/*"],
       "@shared/*": ["src/shared/*"]
     }
@@ -22,6 +23,10 @@
     "src/cli/**/*",
     "src/shared/boot.ts",
     "src/shared/types.ts",
+    // Not the whole renderer — Vue components are driven, not unit-tested. But
+    // a service with logic of its own is testable like anything else, and a
+    // test that imports one needs the `window.api` declaration to compile.
+    "src/renderer/src/env.d.ts",
     "src/tests/**/*"
   ]
 }

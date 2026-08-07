@@ -10,6 +10,7 @@ import { useBell } from '@/composables/useBell'
 import { useSerial } from '@/composables/useSerial'
 import { useFullscreen } from '@/composables/useFullscreen'
 import { bootPayload } from '@/composables/useBoot'
+import { useSettings } from '@/services/settings'
 import { useTerminalStore } from '@/stores/terminal'
 
 /** The screen, the control bar, and the two overlays. */
@@ -22,6 +23,7 @@ const bell = useBell()
 // whichever panel happens to be open (see useSerial).
 const serial = useSerial()
 const fullscreen = useFullscreen()
+const settingsStore = useSettings()
 
 const settingsOpen = ref(false)
 const settingsSection = ref<SettingsSection | undefined>(undefined)
@@ -44,8 +46,9 @@ function openSettings(section: SettingsSection): void {
  * This is the app's one hydration point. Everything below reads settings *into*
  * app-lifetime state — the terminal's configuration, the serial framing, the
  * bell — so that the Settings panel can bind straight to that state instead of
- * loading its own copy and risking writing it back. The web build has no
- * `window.api` and so starts at the defaults, which is what Phase 9 fixes.
+ * loading its own copy and risking writing it back. It runs in both builds:
+ * `useSettings()` reads main's `settings.json` under Electron and
+ * `localStorage` in the browser, so the web build starts where it was left too.
  *
  * The order is what `vtac` needs it to be: settings first (with anything the
  * command line named already folded in by main), then the terminal at that
@@ -59,8 +62,7 @@ async function start(): Promise<void> {
   const boot = await bootPayload()
   for (const problem of boot?.errors ?? []) console.error('[boot]', problem)
 
-  const settings = await window.api?.settings.get()
-  if (settings === undefined) return
+  const settings = await settingsStore.get()
 
   // `configure`, not `setColumns`/`setPersonality`: these are the terminal's
   // configured defaults, so a RIS from the far end comes back to them — which

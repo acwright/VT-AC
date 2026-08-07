@@ -13,6 +13,7 @@ import { useTerminalStore } from '@/stores/terminal'
 import { useSerial } from '@/composables/useSerial'
 import { useBell } from '@/composables/useBell'
 import { useFullscreen } from '@/composables/useFullscreen'
+import { useSettings } from '@/services/settings'
 import { DEFAULT_APP_SETTINGS, MAX_SCALE, MIN_SCALE } from '@shared/types'
 import type { CliShimStatus, Columns, Personality, PortInfo } from '@shared/types'
 
@@ -45,6 +46,7 @@ const store = useTerminalStore()
 const serial = useSerial()
 const { audioReady, muted, volume, initAudio, test } = useBell()
 const fullscreen = useFullscreen()
+const appSettings = useSettings()
 
 const isElectron = computed(() => typeof window !== 'undefined' && window.api !== undefined)
 
@@ -71,7 +73,7 @@ function applyTerminal(next: { personality?: Personality; columns?: Columns }): 
   // configuration, so a reset comes back here rather than to 40 columns of
   // native. It applies the change now as well.
   store.configure({ personality: personality.value, columns: columns.value })
-  void window.api?.settings.set({
+  void appSettings.set({
     personality: personality.value,
     columns: columns.value
   })
@@ -97,7 +99,7 @@ async function toggleSerial(): Promise<void> {
 watch(
   serial.config,
   (config) => {
-    void window.api?.settings.set({ serialConfig: { ...config } })
+    void appSettings.set({ serialConfig: { ...config } })
   },
   { deep: true }
 )
@@ -112,7 +114,7 @@ const webSerialMissing = computed(() => !isElectron.value && !serial.available)
 const scale = ref(DEFAULT_APP_SETTINGS.scale)
 
 function applyScale(): void {
-  void window.api?.settings.set({ scale: scale.value })
+  void appSettings.set({ scale: scale.value })
 }
 
 // ── Bell ─────────────────────────────────────────────────────────────────────
@@ -120,11 +122,11 @@ function applyScale(): void {
 async function toggleMuted(): Promise<void> {
   if (!audioReady.value) await initAudio()
   muted.value = !muted.value
-  void window.api?.settings.set({ bellMuted: muted.value })
+  void appSettings.set({ bellMuted: muted.value })
 }
 
 function applyVolume(): void {
-  void window.api?.settings.set({ bellVolume: volume.value })
+  void appSettings.set({ bellVolume: volume.value })
 }
 
 async function testBell(): Promise<void> {
@@ -171,7 +173,7 @@ onMounted(async () => {
 
   if (!isElectron.value) return
 
-  const settings = await window.api!.settings.get()
+  const settings = await appSettings.get()
   scale.value = settings.scale
 
   await refreshPorts()

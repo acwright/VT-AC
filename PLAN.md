@@ -820,7 +820,45 @@ Two things the plan's sketch did not cover, both found by wiring it up:
    (`ELECTRON_SKIP_BINARY_DOWNLOAD=1`, `upload-pages-artifact`, `deploy-pages`,
    `concurrency: pages`).
 5. `.github/workflows/ci.yml` — typecheck + jest on push and PR.
-6. **Manual, one-time:** enable Pages → GitHub Actions in repo settings.
+6. ~~**Manual, one-time:** enable Pages → GitHub Actions in repo settings.~~ **Done.**
+
+**What item 2 actually cost.** "All handled by the existing `isElectron` checks" was
+true of three of the four differences and not of the fourth. Web Serial, the file
+input and the two hidden sections were already right; settings were not. Every
+caller in the renderer wrote through `window.api?.settings.set(...)`, and on web
+that optional call is not a fallback — it is a discard. Personality, columns,
+framing, bell mute and volume all applied, and all came back at the defaults on
+the next load. `App.vue` had a matching `if (settings === undefined) return`,
+which is why the web build never hydrated at all.
+
+So the branch belongs in one place, not seven: `services/settings.ts`, the same
+two-implementation factory shape `services/serial.ts` already uses — IPC to
+main's `settings.json` under Electron, `localStorage` in the browser — and the
+callers stopped knowing which build they are in. Three keys never reach the web
+side and none needed filtering: `scale` and `fullscreen` are written by the
+Electron-only DISPLAY section and by main, and `lastPort` by a connection that
+named a path, which Web Serial never does.
+
+The web store is read-modify-write rather than an in-memory copy, because two
+tabs of the Pages build are two independent terminals sharing one origin. It
+takes a two-method `KeyValueStore` rather than `Storage` so that `src/tests/
+renderer/settings.test.ts` can ask what a hand-edited or half-written record
+does to a terminal on the next load — and so a browser that refuses storage
+outright (Safari private mode throws from `setItem`) is a caught error rather
+than a broken app. That test is the first under `src/tests/renderer/`; Vue
+components stay driven rather than unit-tested, but a service with logic of its
+own is testable like anything else.
+
+CI builds the web bundle as well as typechecking and testing. `deploy.yml`
+already builds it, but only after a push to main has happened — which makes a
+pull request that breaks it fail after publication rather than before.
+
+**Verified on the built bundle, not in dev:** `npm run preview:web` driven over
+the DevTools protocol — fresh load at 320×240/VT-AC/40, a control bar with no
+fullscreen button, `window.api` undefined and nothing in `localStorage`; the
+bar's readouts changing the terminal *without* persisting; the panel's TERMINAL
+section persisting; and a reload coming back at 640×480 in VT-100 mode. The one
+console error is `/favicon.ico`, which Phase 10 supplies.
 
 ---
 

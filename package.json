@@ -44,6 +44,7 @@
     "dist:win": "npm run build && bash scripts/dist-win.sh",
     "dist:linux": "bash scripts/dist-linux.sh",
     "dist": "npm run dist:mac && npm run dist:win && npm run dist:linux",
+    "verify:palette": "node scripts/verify-palette.mjs",
     "docs:card": "'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless --disable-gpu --no-pdf-header-footer --print-to-pdf=docs/VT-AC.pdf docs/VT-AC.html",
     "typecheck": "vue-tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "test": "NODE_OPTIONS='--no-experimental-webstorage' jest",

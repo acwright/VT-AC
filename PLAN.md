@@ -197,9 +197,13 @@ opens a blank Electron window, `npm run build:web` emits `dist/web/`.
 **Goal:** everything the SDL host did for free, extracted and tested.
 
 1. **`src/core/palette.ts`**
-   - `RGB332_RGBA: Uint32Array(256)` — expand exactly as SDL does:
-     `r = round(((v >> 5) & 7) * 255 / 7)`, `g = round(((v >> 2) & 7) * 255 / 7)`,
-     `b = round((v & 3) * 255 / 3)`, packed little-endian with `a = 255`.
+   - `RGB332_RGBA: Uint32Array(256)` — expand exactly as SDL does. SDL's
+     `SDL_expand_byte` tables **truncate**, they do not round:
+     `r = floor(((v >> 5) & 7) * 255 / 7)`, `g = floor(((v >> 2) & 7) * 255 / 7)`,
+     `b = floor((v & 3) * 255 / 3)`, packed little-endian with `a = 255`.
+     The two differ at 3-bit levels 2, 4 and 6 (72/73, 145/146, 218/219);
+     `images/palette.png` settles it in favour of truncation, and
+     `npm run verify:palette` is that check made repeatable.
    - `XTERM256_TO_RGB332: Uint8Array(256)` — the xterm 256-color cube and
      greyscale ramp quantized to nearest RGB332, for `SGR 38;5;n` (Phase 5).
    - `rgbToRGB332(r, g, b)` — for `SGR 38;2;r;g;b` truecolor.
@@ -218,13 +222,17 @@ opens a blank Electron window, `npm run build:web` emits `dist/web/`.
    `keyToBytes(event, personality, modes): number[] | null`.
 
 **Tests:** `palette.test.ts` (all 256 entries against the SDL formula; spot-check
-`0x00`→black, `0xFF`→white, `0xE0`→red, `0x1C`→green, `0x03`→blue, and verify by
-eye against the committed `images/palette.png`), `font.test.ts` (every DEC
-line-drawing code resolves to a CP437 glyph that exists), `keymap.test.ts`
-(every control key, both ends of the printable range).
+`0x00`→black, `0xFF`→white, `0xE0`→red, `0x1C`→green, `0x03`→blue), `font.test.ts`
+(every DEC line-drawing code resolves to a CP437 glyph that exists, and a drawn
+box's corners and edges join up), `keymap.test.ts` (every control key, both ends
+of the printable range).
 
 **Risk:** the RGB332 expansion is the one place a no-behavior-change claim could
-break while every non-pixel test still passes. `images/palette.png` is ground truth.
+break while every non-pixel test still passes. `images/palette.png` is ground
+truth, and `scripts/verify-palette.mjs` checks against it rather than by eye: it
+locates the palette grid in the screenshot, applies the sRGB→Display P3
+transform a macOS capture bakes in, and scores both candidate expansions.
+Truncation wins 172/256 exact against rounding's 86/256.
 
 ---
 

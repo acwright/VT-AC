@@ -419,7 +419,7 @@ material they draw on, not the order of work.
 | **5.3** | CSI dispatch: cursor, erase, edit, DECSTBM, deferred wrap | §5.3 | **done** |
 | **5.4** | SGR and colour, through `XTERM256_TO_RGB332` | §5.3 | **done** |
 | **5.5** | Modes: DECSET/DECRST, alt screen | §5.3 | **done** |
-| 5.6 | Charsets, tab stops, reports, RIS | §5.3 | |
+| **5.6** | Charsets, tab stops, reports, RIS | §5.3 | **done** |
 | 5.7 | Keyboard, settings, control bar, store wiring | §5.4 | |
 | 5.8 | `vttest` conformance run, real software, `VT100-CONFORMANCE.md` | §5.5 | |
 
@@ -474,6 +474,19 @@ terminal running `vi`, which has no native command available to ask for one — 
 host chose a glyph before switching. And **`39`/`49`** in 5.4, without which an
 application can only reach default colours through `SGR 0`, losing its
 attributes with them.
+
+5.6 adds `ansi/Charsets.ts`, tab stops and the reports. CP437 pays off twice
+here: DEC Special Graphics line drawing resolves onto glyphs the ROM already
+has, and so does the UK set's `£`, so both are real rather than approximated.
+DA and DECID answer `ESC [ ? 1 ; 2 c` — a VT100 with the Advanced Video Option,
+which is exactly the machine being impersonated, since AVO is what gave a VT100
+the bold/underline/blink/reverse the rasterizer can draw.
+
+Three sequences are **deliberately unanswered**, and stay that way: DECSTR
+(`CSI ! p`) and the secondary DA (`CSI > c`) are VT220, and `ESC # 3`–`# 6` are
+double-height and double-width lines an 8×8 ROM on a fixed grid cannot draw.
+Silence is what the terminal being impersonated returns; guessing at DECSTR's
+DECAWM semantics, which DEC and xterm disagree on, would have been worse.
 
 One consequence worth recording: routing on personality makes `ESC 0x04`
 unreachable from `vt100`, so the query's personality byte always reads `00`.

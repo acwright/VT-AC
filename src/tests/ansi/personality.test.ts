@@ -273,10 +273,11 @@ describe('sequences not implemented yet', () => {
   // stop reading the stream. Each of these moves out of this list as the stage
   // that owns it lands.
   it.each([
-    ['DECTCEM', '[?25l'], // 5.5
-    ['SCS', '(0'], // 5.6
-    ['DECSTR', '[!p'], // 5.6
-    ['secondary DA', '[>c'], // 5.6
+    // DECSTR and the secondary DA are VT220 sequences. VT-AC impersonates a
+    // VT100 with AVO, and a VT100 answers both with silence — so these two
+    // stay on this list for good rather than until some later stage.
+    ['DECSTR', '[!p'],
+    ['secondary DA', '[>c'],
     ['OSC', ']0;title\x07'],
     ['DCS', 'P1$q m\x1b\\']
   ])('swallows %s and keeps reading', (_name, sequence) => {

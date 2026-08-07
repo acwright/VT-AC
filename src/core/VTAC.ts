@@ -37,8 +37,7 @@ export class VTAC {
    * cells and derives the framebuffer from them; every drawing method below is
    * now a two-line delegation. The renderer reads `screen.plane` and
    * `screen.takeDamage()` directly; `buffer` is for everything that predates it.
-   */
-  /**
+   *
    * Not `readonly`: the alternate screen buffer (`CSI ? 1049 h`) is this
    * reference being pointed at a second `Screen`. Everything that reads the
    * screen goes through here and picks up the swap for free — including
@@ -256,6 +255,7 @@ export class VTAC {
     // The row count changed under the scroll region, and DECCOLM opens the
     // margins on real hardware anyway.
     this.vt100.resetMargins()
+    this.vt100.resetTabStops()
   }
 
   /**
@@ -334,6 +334,7 @@ export class VTAC {
     // Last, because the bottom margin is read off the row count and the lines
     // above may just have changed it.
     this.vt100.resetMargins()
+    this.vt100.resetTabStops()
   }
 
   bell = () => {

@@ -24,6 +24,7 @@
 
 import { Attr } from '../Cell'
 import { Screen } from '../Screen'
+import { Charsets, charsetFor, slotFor } from './Charsets'
 import { AnsiMode, DecMode, Modes } from './Modes'
 import { applySGR, resetPen } from './SGR'
 import type { Pen } from './SGR'
@@ -59,6 +60,17 @@ interface SavedCursor {
 export class Dispatch implements AnsiHandler, Pen {
   /** The mode flags. See `Modes` for the two that deliberately live elsewhere. */
   readonly modes = new Modes()
+
+  /** The four designated character sets, and which one is shifted in. */
+  readonly charsets = new Charsets()
+
+  /**
+   * One byte per column, `1` where a tab stop is.
+   *
+   * Reallocated on a column-mode switch — stops beyond the new right margin
+   * mean nothing, and the array has to be the width of the screen it describes.
+   */
+  private tabStops = new Uint8Array(0)
 
   /**
    * The `Attr` bitfield SGR is currently setting on new text.
@@ -133,6 +145,7 @@ export class Dispatch implements AnsiHandler, Pen {
 
   constructor(private readonly vtac: VTAC) {
     this.bottom = vtac.screen.rows - 1
+    this.resetTabStops()
   }
 
   /** Whether the alternate screen is the one currently in front. */
@@ -151,6 +164,7 @@ export class Dispatch implements AnsiHandler, Pen {
     this.leaveAlternateScreen()
     this.alternate = null
     this.modes.reset()
+    this.charsets.reset()
     resetPen(this)
     this.pendingWrap = false
     this.saved = null
@@ -165,6 +179,20 @@ export class Dispatch implements AnsiHandler, Pen {
   resetMargins(): void {
     this.top = 0
     this.bottom = this.vtac.screen.rows - 1
+  }
+
+  /**
+   * Back to a stop every eight columns, sized to the current screen.
+   *
+   * Column zero is deliberately not a stop: tabbing from the left margin lands
+   * on column 8, which is what every terminal does and what makes the first
+   * column of a tabbed table start where it looks like it should.
+   */
+  resetTabStops(): void {
+    this.tabStops = new Uint8Array(this.vtac.screen.cols)
+    for (let col = TAB_WIDTH; col < this.tabStops.length; col += TAB_WIDTH) {
+      this.tabStops[col] = 1
+    }
   }
 
   //
@@ -194,7 +222,14 @@ export class Dispatch implements AnsiHandler, Pen {
       screen.insertChars(vtac.column, vtac.row, 1, this.foreground, this.background)
     }
 
-    screen.putGlyph(vtac.column, vtac.row, code, this.foreground, this.background, this.attrs)
+    screen.putGlyph(
+      vtac.column,
+      vtac.row,
+      this.charsets.translate(code),
+      this.foreground,
+      this.background,
+      this.attrs
+    )
 
     if (vtac.column < screen.cols - 1) {
       vtac.column++
@@ -237,6 +272,12 @@ export class Dispatch implements AnsiHandler, Pen {
       case 0x0d: // CR
         this.setColumn(0)
         break
+      case 0x0e: // SO — shift out, G1 into GL
+        this.charsets.gl = 1
+        break
+      case 0x0f: // SI — shift in, G0 into GL
+        this.charsets.gl = 0
+        break
     }
   }
 
@@ -246,11 +287,30 @@ export class Dispatch implements AnsiHandler, Pen {
 
   /** `ESC` … final. */
   esc(final: number, seq: AnsiSequence): void {
-    // `ESC ( 0` and the other charset designators carry an intermediate and
-    // are 5.6's, as is `ESC # 8` (DECALN).
-    if (seq.intermediates.length > 0) return
+    if (seq.intermediates.length > 0) {
+      if (seq.intermediates.length !== 1) return
+      const intermediate = seq.intermediates[0]
+
+      // `ESC ( 0` and friends — SCS, designate a character set into a G slot.
+      const slot = slotFor(intermediate)
+      if (slot >= 0) {
+        const charset = charsetFor(final)
+        if (charset !== null) this.charsets.designate(slot, charset)
+        return
+      }
+
+      // `ESC # 8` — DECALN.
+      if (intermediate === 0x23 && final === 0x38) this.screenAlignment()
+      return
+    }
 
     switch (final) {
+      case 0x48: // 'H' — HTS, set a tab stop here
+        this.setTabStop()
+        break
+      case 0x5a: // 'Z' — DECID, answered as DA is
+        this.deviceAttributes()
+        break
       case 0x37: // '7' — DECSC, save cursor
         this.saveCursor()
         break
@@ -282,9 +342,11 @@ export class Dispatch implements AnsiHandler, Pen {
       return
     }
 
-    // `CSI > c` (secondary DA) and `CSI ! p` (DECSTR) carry a prefix or an
-    // intermediate and belong to 5.6. Reading them as their unadorned
-    // namesakes would be worse than ignoring them.
+    // Anything carrying another prefix or an intermediate is a sequence a
+    // VT100 does not have: `CSI > c` is the VT220 secondary DA, `CSI ! p` is
+    // DECSTR. Both are answered by silence, which is what the terminal being
+    // impersonated does. Reading them as their unadorned namesakes — `CSI c`
+    // and `CSI p` — would be much worse than ignoring them.
     if (seq.prefix !== 0 || seq.intermediates.length > 0) return
 
     const vtac = this.vtac
@@ -346,8 +408,18 @@ export class Dispatch implements AnsiHandler, Pen {
         screen.eraseChars(vtac.column, vtac.row, count, fg, bg)
         this.pendingWrap = false
         break
+      case 0x63: // 'c' — DA, device attributes
+        // `CSI 0 c` and a bare `CSI c` are the request; anything else is not.
+        if (seq.param(0) === 0) this.deviceAttributes()
+        break
       case 0x64: // 'd' — VPA
         this.setRowFromParam(count)
+        break
+      case 0x67: // 'g' — TBC, clear tab stops
+        this.clearTabStops(seq.param(0))
+        break
+      case 0x6e: // 'n' — DSR, device status report
+        this.statusReport(seq.param(0))
         break
       case 0x68: // 'h' — SM, set mode
         this.ansiModes(seq, true)
@@ -431,10 +503,38 @@ export class Dispatch implements AnsiHandler, Pen {
     this.setRow(Math.min(vtac.row + count, limit))
   }
 
-  /** VT-100 tab: the next multiple of eight, stopping at the right margin. */
+  /**
+   * HT — forward to the next tab stop, or to the right margin if there is none.
+   *
+   * Native mode's `TAB` is every *four* columns and stays that way: v1 defined
+   * it so, and the premise of the personality switch is that where the two
+   * disagree, both are kept.
+   */
   private tab(): void {
-    const column = this.vtac.column
-    this.setColumn(Math.floor(column / TAB_WIDTH) * TAB_WIDTH + TAB_WIDTH)
+    const cols = this.vtac.screen.cols
+    for (let col = this.vtac.column + 1; col < cols; col++) {
+      if (this.tabStops[col] === 1) {
+        this.setColumn(col)
+        return
+      }
+    }
+    this.setColumn(cols - 1)
+  }
+
+  // `tabStops.length` is always `screen.cols` — `resetTabStops` is the only
+  // thing that allocates it and `VTAC.setColumns` calls it on every geometry
+  // change — and the cursor column is always clamped below that. So neither of
+  // the two below needs a bounds check.
+
+  /** HTS — a tab stop at the cursor's column. */
+  private setTabStop(): void {
+    this.tabStops[this.vtac.column] = 1
+  }
+
+  /** TBC — 0 clears the stop under the cursor, 3 clears every one. */
+  private clearTabStops(mode: number): void {
+    if (mode === 3) this.tabStops.fill(0)
+    else if (mode === 0) this.tabStops[this.vtac.column] = 0
   }
 
   /**
@@ -724,6 +824,70 @@ export class Dispatch implements AnsiHandler, Pen {
           break
       }
     }
+  }
+
+  //
+  // REPORTS
+  //
+  // Replies go out over the same wire the keyboard uses, and land nowhere at
+  // all when no serial port has claimed it — `VTAC.transmit`'s rule, which is
+  // v1's rule for keystrokes pointed in the other direction.
+  //
+
+  /** Send a reply, given as the text of the sequence. */
+  private reply(text: string): void {
+    const bytes: number[] = []
+    for (let i = 0; i < text.length; i++) bytes.push(text.charCodeAt(i))
+    this.vtac.transmit(bytes)
+  }
+
+  /**
+   * DA and DECID — "what are you?"
+   *
+   * `ESC [ ? 1 ; 2 c` is a VT100 with the Advanced Video Option, which is the
+   * machine VT-AC is impersonating: AVO is what gave a VT100 its bold,
+   * underline, blink and reverse, and those are exactly the four attributes
+   * the rasterizer can draw.
+   */
+  private deviceAttributes(): void {
+    this.reply('\x1b[?1;2c')
+  }
+
+  /** DSR — 5 asks whether the terminal is well, 6 asks where the cursor is. */
+  private statusReport(request: number): void {
+    const vtac = this.vtac
+
+    if (request === 5) {
+      this.reply('\x1b[0n')
+      return
+    }
+
+    if (request === 6) {
+      // CPR, one-based — and relative to the top margin under DECOM, so that a
+      // report round-trips through the same coordinates CUP accepts.
+      const row = this.modes.origin ? vtac.row - this.top + 1 : vtac.row + 1
+      this.reply(`\x1b[${row};${vtac.column + 1}R`)
+    }
+  }
+
+  /**
+   * DECALN — fill the screen with `E`s.
+   *
+   * A screen-alignment pattern, and the first thing `vttest` draws. The margins
+   * open and the cursor homes, which is what makes it usable as the "known
+   * state" the tests that follow it assume.
+   */
+  private screenAlignment(): void {
+    const screen = this.vtac.screen
+
+    for (let row = 0; row < screen.rows; row++) {
+      for (let col = 0; col < screen.cols; col++) {
+        screen.putGlyph(col, row, 0x45, this.foreground, this.background)
+      }
+    }
+
+    this.resetMargins()
+    this.home()
   }
 
   //

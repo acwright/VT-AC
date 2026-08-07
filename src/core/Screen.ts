@@ -286,49 +286,167 @@ export class Screen {
   /**
    * Shift the whole screen one cell, filling the vacated edge with `bg`.
    *
-   * Every plane moves with one `copyWithin` per direction rather than a cell at
-   * a time — the point of the structure-of-arrays layout, and the reason this
-   * is faster than v1's 64 pixel writes per cell.
+   * v1's four scroll commands, each now the whole-screen, one-line case of a
+   * region operation below. Expressing them that way rather than keeping a
+   * second implementation is what stops the two drifting: the plan calls scroll
+   * regions crossed with IL/DL "where off-by-one errors hide", and there is no
+   * crossing to get wrong if there is only one piece of code.
    */
   scroll(direction: 'left' | 'right' | 'up' | 'down', fg: number, bg: number): void {
-    const { cols, rows, width } = this
-
     switch (direction) {
       case 'up':
-        this.shiftCells(-cols)
-        this.plane.copyWithin(0, width * 8, width * this.height)
-        for (let c = 0; c < cols; c++) this.clearCell(c, rows - 1, fg, bg)
+        this.scrollUp(0, this.rows - 1, 1, fg, bg)
         break
       case 'down':
-        this.shiftCells(cols)
-        this.plane.copyWithin(width * 8, 0, width * (this.height - 8))
-        for (let c = 0; c < cols; c++) this.clearCell(c, 0, fg, bg)
+        this.scrollDown(0, this.rows - 1, 1, fg, bg)
         break
       case 'left':
-        for (let r = 0; r < rows; r++) {
-          const base = r * cols
-          this.shiftRow(base, -1)
-          for (let y = 0; y < 8; y++) {
-            const line = (r * 8 + y) * width
-            this.plane.copyWithin(line, line + 8, line + width)
-          }
-          this.clearCell(cols - 1, r, fg, bg)
-        }
+        for (let row = 0; row < this.rows; row++) this.deleteChars(0, row, 1, fg, bg)
         break
       case 'right':
-        for (let r = 0; r < rows; r++) {
-          const base = r * cols
-          this.shiftRow(base, 1)
-          for (let y = 0; y < 8; y++) {
-            const line = (r * 8 + y) * width
-            this.plane.copyWithin(line + 8, line, line + width - 8)
-          }
-          this.clearCell(0, r, fg, bg)
-        }
+        for (let row = 0; row < this.rows; row++) this.insertChars(0, row, 1, fg, bg)
         break
     }
+  }
 
-    this.damageAll()
+  //
+  // REGIONS AND EDITING
+  //
+  // What VT-100 mode needs and native mode has no word for. Every one of these
+  // takes its bounds as arguments rather than reading a margin off the screen:
+  // a scroll region is protocol state, it belongs to the personality that has
+  // the concept, and `Screen` stays a store. It also means the alternate screen
+  // is still nothing more than a second `Screen`.
+  //
+  // Rows and columns outside the screen are clamped rather than rejected, which
+  // is what real hardware does with a `DECSTBM 1;99` on a 30-row terminal.
+  //
+
+  /**
+   * Move rows `top`–`bottom` up by `count`, blanking the rows exposed at the
+   * bottom of the region.
+   *
+   * The engine behind LF and IND at the bottom margin, `CSI S` (SU), and — with
+   * the cursor row standing in for `top` — DL.
+   */
+  scrollUp(top: number, bottom: number, count: number, fg: number, bg: number): void {
+    const first = Math.max(0, top)
+    const last = Math.min(this.rows - 1, bottom)
+    if (first > last || count <= 0) return
+
+    const { cols } = this
+    const n = Math.min(count, last - first + 1)
+    const kept = last - first + 1 - n
+
+    if (kept > 0) {
+      this.moveCells(first * cols, (first + n) * cols, kept * cols)
+      const stride = this.width * 8
+      this.plane.copyWithin(first * stride, (first + n) * stride, (last + 1) * stride)
+    }
+
+    for (let row = last - n + 1; row <= last; row++) {
+      for (let col = 0; col < cols; col++) this.clearCell(col, row, fg, bg)
+    }
+
+    this.markDamage(0, first)
+    this.markDamage(cols - 1, last)
+  }
+
+  /**
+   * Move rows `top`–`bottom` down by `count`, blanking the rows exposed at the
+   * top of the region.
+   *
+   * The engine behind RI at the top margin, `CSI T` (SD), and — with the cursor
+   * row standing in for `top` — IL.
+   */
+  scrollDown(top: number, bottom: number, count: number, fg: number, bg: number): void {
+    const first = Math.max(0, top)
+    const last = Math.min(this.rows - 1, bottom)
+    if (first > last || count <= 0) return
+
+    const { cols } = this
+    const n = Math.min(count, last - first + 1)
+    const kept = last - first + 1 - n
+
+    if (kept > 0) {
+      this.moveCells((first + n) * cols, first * cols, kept * cols)
+      const stride = this.width * 8
+      this.plane.copyWithin((first + n) * stride, first * stride, (first + kept) * stride)
+    }
+
+    for (let row = first; row < first + n; row++) {
+      for (let col = 0; col < cols; col++) this.clearCell(col, row, fg, bg)
+    }
+
+    this.markDamage(0, first)
+    this.markDamage(cols - 1, last)
+  }
+
+  /**
+   * ICH — open `count` blank cells at `col`, pushing the rest of the row right.
+   *
+   * Cells pushed past the last column are gone; nothing wraps onto the next
+   * row. That is the VT102 behaviour and the reason a terminal can insert into
+   * the middle of a line without disturbing anything below it.
+   */
+  insertChars(col: number, row: number, count: number, fg: number, bg: number): void {
+    if (!this.contains(col, row) || count <= 0) return
+
+    const { cols } = this
+    const n = Math.min(count, cols - col)
+    const kept = cols - col - n
+
+    if (kept > 0) {
+      const base = row * cols
+      this.moveCells(base + col + n, base + col, kept)
+      for (let y = 0; y < 8; y++) {
+        const line = (row * 8 + y) * this.width
+        this.plane.copyWithin(line + (col + n) * 8, line + col * 8, line + (col + kept) * 8)
+      }
+    }
+
+    for (let c = col; c < col + n; c++) this.clearCell(c, row, fg, bg)
+
+    this.markDamage(col, row)
+    this.markDamage(cols - 1, row)
+  }
+
+  /**
+   * DCH — remove `count` cells at `col`, pulling the rest of the row left and
+   * blanking the cells exposed at the right-hand edge.
+   */
+  deleteChars(col: number, row: number, count: number, fg: number, bg: number): void {
+    if (!this.contains(col, row) || count <= 0) return
+
+    const { cols } = this
+    const n = Math.min(count, cols - col)
+    const kept = cols - col - n
+
+    if (kept > 0) {
+      const base = row * cols
+      this.moveCells(base + col, base + col + n, kept)
+      for (let y = 0; y < 8; y++) {
+        const line = (row * 8 + y) * this.width
+        this.plane.copyWithin(line + col * 8, line + (col + n) * 8, line + cols * 8)
+      }
+    }
+
+    for (let c = cols - n; c < cols; c++) this.clearCell(c, row, fg, bg)
+
+    this.markDamage(col, row)
+    this.markDamage(cols - 1, row)
+  }
+
+  /**
+   * ECH — blank `count` cells at `col` where they stand.
+   *
+   * Nothing shifts, which is the whole difference from DCH: the row keeps its
+   * length and everything to the right of the run stays where it is.
+   */
+  eraseChars(col: number, row: number, count: number, fg: number, bg: number): void {
+    if (count <= 0) return
+    const end = Math.min(col + count, this.cols)
+    for (let c = Math.max(0, col); c < end; c++) this.clearCell(c, row, fg, bg)
   }
 
   /** Reset to a blank screen: white on black, nothing dirty, all damaged. */
@@ -494,71 +612,30 @@ export class Screen {
     if (row > this.damageMaxRow) this.damageMaxRow = row
   }
 
-  /** Shift every cell plane by `delta` cells, then recount what is dirty. */
-  private shiftCells(delta: number): void {
-    const count = this.cols * this.rows
-    if (delta < 0) {
-      const n = -delta
-      this.kind.copyWithin(0, n, count)
-      this.codes.copyWithin(0, n, count)
-      this.fg.copyWithin(0, n, count)
-      this.bg.copyWithin(0, n, count)
-      this.attrs.copyWithin(0, n, count)
-      this.dirty.copyWithin(0, n, count)
-      this.pixels.copyWithin(0, n * CELL_PIXELS, count * CELL_PIXELS)
-    } else {
-      this.kind.copyWithin(delta, 0, count - delta)
-      this.codes.copyWithin(delta, 0, count - delta)
-      this.fg.copyWithin(delta, 0, count - delta)
-      this.bg.copyWithin(delta, 0, count - delta)
-      this.attrs.copyWithin(delta, 0, count - delta)
-      this.dirty.copyWithin(delta, 0, count - delta)
-      this.pixels.copyWithin(delta * CELL_PIXELS, 0, (count - delta) * CELL_PIXELS)
-    }
-    this.recountDirty()
-  }
-
-  /** Shift one row of cells by `delta` columns within `[base, base + cols)`. */
-  private shiftRow(base: number, delta: number): void {
-    const { cols } = this
-    if (delta < 0) {
-      const n = -delta
-      this.kind.copyWithin(base, base + n, base + cols)
-      this.codes.copyWithin(base, base + n, base + cols)
-      this.fg.copyWithin(base, base + n, base + cols)
-      this.bg.copyWithin(base, base + n, base + cols)
-      this.attrs.copyWithin(base, base + n, base + cols)
-      this.dirty.copyWithin(base, base + n, base + cols)
-      this.pixels.copyWithin(
-        base * CELL_PIXELS,
-        (base + n) * CELL_PIXELS,
-        (base + cols) * CELL_PIXELS
-      )
-    } else {
-      this.kind.copyWithin(base + delta, base, base + cols - delta)
-      this.codes.copyWithin(base + delta, base, base + cols - delta)
-      this.fg.copyWithin(base + delta, base, base + cols - delta)
-      this.bg.copyWithin(base + delta, base, base + cols - delta)
-      this.attrs.copyWithin(base + delta, base, base + cols - delta)
-      this.dirty.copyWithin(base + delta, base, base + cols - delta)
-      this.pixels.copyWithin(
-        (base + delta) * CELL_PIXELS,
-        base * CELL_PIXELS,
-        (base + cols - delta) * CELL_PIXELS
-      )
-    }
-    this.recountDirty()
-  }
-
   /**
-   * Recount `dirtyCount` after the `dirty` plane has been shifted wholesale.
+   * Move a run of `length` cells from `from` to `to`, planes and all.
    *
-   * One pass over `cols * rows` bytes, against a scroll's several thousand
-   * pixel moves — not worth threading the count through `copyWithin`.
+   * The one place cells relocate, and the reason the structure-of-arrays layout
+   * was worth it: seven `copyWithin` calls move any number of cells, where v1
+   * wrote 64 pixels per cell by hand. `copyWithin` handles overlap in either
+   * direction, so a scroll up, a scroll down, an insert and a delete are all
+   * this same call with different arguments.
+   *
+   * `dirtyCount` is adjusted across the destination span rather than recounted
+   * over the whole screen — the flags being moved are the only ones that
+   * change, and this is already an O(length) operation.
    */
-  private recountDirty(): void {
-    let count = 0
-    for (let i = 0; i < this.dirty.length; i++) count += this.dirty[i]
-    this.dirtyCount = count
+  private moveCells(to: number, from: number, length: number): void {
+    for (let i = to; i < to + length; i++) this.dirtyCount -= this.dirty[i]
+
+    this.kind.copyWithin(to, from, from + length)
+    this.codes.copyWithin(to, from, from + length)
+    this.fg.copyWithin(to, from, from + length)
+    this.bg.copyWithin(to, from, from + length)
+    this.attrs.copyWithin(to, from, from + length)
+    this.dirty.copyWithin(to, from, from + length)
+    this.pixels.copyWithin(to * CELL_PIXELS, from * CELL_PIXELS, (from + length) * CELL_PIXELS)
+
+    for (let i = to; i < to + length; i++) this.dirtyCount += this.dirty[i]
   }
 }

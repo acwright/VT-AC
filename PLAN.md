@@ -415,7 +415,7 @@ material they draw on, not the order of work.
 | Stage | Work | Draws on | Status |
 | --- | --- | --- | --- |
 | **5.1** | Personality routing + the ANSI state machine | §5.1, §5.2 | **done** |
-| 5.2 | `Screen` operations ANSI needs: scroll regions, IL/DL/ICH/DCH/ECH | — | |
+| **5.2** | `Screen` operations ANSI needs: scroll regions, IL/DL/ICH/DCH/ECH | — | **done** |
 | 5.3 | CSI dispatch: cursor, erase, edit, DECSTBM | §5.3 | |
 | 5.4 | SGR and colour, through `XTERM256_TO_RGB332` | §5.3 | |
 | 5.5 | Modes: DECSET/DECRST, deferred last-column wrap, alt screen | §5.3 | |
@@ -431,6 +431,15 @@ Everything else is ignored, which is what a terminal does with a sequence it
 does not know. `ESC [ ? 7000 h` is confirmed clear: xterm's `ctlseqs` documents
 nothing above 2006, DEC's own private modes are all below 100, and the other
 squatters sit at 1000–1016, 2004 and mintty's 7700s.
+
+5.2 puts region- and count-parameterized operations on `Screen` — `scrollUp`,
+`scrollDown`, `insertChars`, `deleteChars`, `eraseChars` — and makes v1's four
+scroll commands the whole-screen, one-line case of them. Bounds are arguments
+rather than screen state: a scroll region is protocol state and belongs to the
+personality that has the concept, which also keeps the alternate screen nothing
+more than a second `Screen`. IL and DL are then *literally* a region scroll
+starting at the cursor row, so the crossing the plan flags as "where off-by-one
+errors hide" has no second implementation to disagree with the first.
 
 One consequence worth recording: routing on personality makes `ESC 0x04`
 unreachable from `vt100`, so the query's personality byte always reads `00`.
@@ -529,7 +538,13 @@ Plus keypad application mode (`ESC =` / `ESC >`) and PF1–PF4 on F1–F4.
 - `ansi/csi.test.ts`, `sgr.test.ts`, `modes.test.ts`, `scrollregion.test.ts`,
   `altscreen.test.ts`, `charset.test.ts`, `keymap.vt100.test.ts`.
 - **`vttest` as the acceptance gate.** The classic VT100 conformance suite, run
-  against the app over a serial loopback (`socat` pty pair). Menu items 1 (cursor
+  against the app over a **hardware serial loopback** — two USB-to-serial cables
+  wired to each other on the development Mac, an FTDI at
+  `/dev/cu.usbserial-FTDMBHZ7` and a Prolific at `/dev/cu.PL2303G-USBtoUART1130`.
+  Better than a `socat` pty pair for this gate, because it exercises the real
+  `serialport` path, framing and baud rate — which is what a packaged build has
+  to work over. (Check the names with `ls /dev/cu.*`; USB serial nodes move.)
+  Menu items 1 (cursor
   movement), 2 (screen features), 3 (character sets) and 6 (terminal reports)
   must pass. Record which items pass in `docs/VT100-CONFORMANCE.md` — an honest
   list of what works beats an unqualified "VT-100 compatible" claim.

@@ -436,8 +436,9 @@ footer a { color: var(--muted-fg); }
     <p class="lede">
       v1.3.0 reserved <code>$1B</code> for future escape codes and treated it as
       a no-op. It is now the introducer for two-byte extensions. An unrecognised
-      second byte is discarded, which preserves the old no-op behavior for any
-      stream that carried a stray ESC.
+      second byte is processed as an ordinary byte, so a stream that carried a
+      stray ESC behaves exactly as it did under v1 — the deviation is the five
+      sequences below and nothing else.
     </p>
     <table>
       <thead>
@@ -454,9 +455,15 @@ footer a { color: var(--muted-fg); }
         <tr><td class="key">1B 03</td><td class="name">VT-100 Personality</td><td class="len">2</td><td class="notes">Hand the stream to the ANSI / VT-100 parser</td></tr>
         <tr><td class="key">1B 04</td><td class="name">Query</td><td class="len">2</td><td class="notes">Reply on the serial link with personality, columns and rows</td></tr>
         <tr><td class="key">1B 1B</td><td class="name">Literal ESC</td><td class="len">2</td><td class="notes">Emit <code>$1B</code> as data</td></tr>
-        <tr><td class="key">1B ✽</td><td class="name">Ignored</td><td class="len">2</td><td class="notes">Any other second byte is discarded</td></tr>
+        <tr><td class="key">1B ✽</td><td class="name">No-op ESC</td><td class="len">2</td><td class="notes">Any other second byte runs as if the ESC were not there — v1's behavior</td></tr>
       </tbody>
     </table>
+    <p class="lede" style="margin-top:8px">
+      The query reply is five bytes — <code>1B 04</code>, then personality
+      (<code>00</code> native, <code>01</code> VT-100), then the column and row
+      counts as literal numbers: <code>1B 04 00 28 1E</code> for 40 × 30,
+      <code>1B 04 00 50 3C</code> for 80 × 60.
+    </p>
   </section>
 
   <section>

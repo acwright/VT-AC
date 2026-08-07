@@ -1,11 +1,25 @@
 import { CHARACTERS } from './Font'
 import { Screen } from './Screen'
+import type { Personality } from './types'
+
+/** The two geometries VT-AC offers, keyed by column count. */
+export const GEOMETRIES = {
+  40: { cols: 40, rows: 30 },
+  80: { cols: 80, rows: 60 }
+} as const
+
+/** A column count `setColumns` accepts. */
+export type Columns = keyof typeof GEOMETRIES
 
 export class VTAC {
 
+  /** @deprecated Instance geometry lives on `screen`; this is the 40-column default. */
   static COLUMNS: number = 40
+  /** @deprecated Instance geometry lives on `screen`; this is the 40-column default. */
   static ROWS: number = 30
+  /** @deprecated Instance geometry lives on `screen`; this is the 40-column default. */
   static WIDTH: number = VTAC.COLUMNS * 8
+  /** @deprecated Instance geometry lives on `screen`; this is the 40-column default. */
   static HEIGHT: number = VTAC.ROWS * 8
 
   /**
@@ -55,6 +69,43 @@ export class VTAC {
     return this.screen.height
   }
 
+  /** Cells across — 40 or 80. Instance geometry; the static is the default. */
+  get columns(): number {
+    return this.screen.cols
+  }
+
+  /** Cells down — 30 or 60. Instance geometry; the static is the default. */
+  get rows(): number {
+    return this.screen.rows
+  }
+
+  /**
+   * Which protocol the byte stream is read as.
+   *
+   * `native` is v1's protocol plus the ESC extensions below; `vt100` is the
+   * ANSI compatibility mode. Phase 4 owns the state and the `ESC 0x03` switch
+   * that sets it — Phase 5 owns the parser that reads it, so until then both
+   * personalities parse natively and the only visible effect is what `ESC 0x04`
+   * reports back.
+   */
+  personality: Personality = 'native'
+
+  /**
+   * The personality `reset()` returns to.
+   *
+   * The CLI's `--mode` and the settings panel set this; RIS (Phase 5) and
+   * `0x04` alike come back to it rather than to a hard-coded `native`.
+   */
+  defaultPersonality: Personality = 'native'
+
+  /**
+   * The column count `reset()` returns to.
+   *
+   * Same argument as `defaultPersonality`: `vtac --columns 80` should survive a
+   * reset from the far end, or the flag means nothing after the first `0x04`.
+   */
+  defaultColumns: Columns = 40
+
   mode: 'text' | 'graphics' = 'text'
 
   column: number = 0
@@ -75,14 +126,71 @@ export class VTAC {
 
   dataNextByte: boolean = false
 
+  /**
+   * Set by `0x1B`: the next byte selects an ESC extension.
+   *
+   * v1 treated `0x1B` as a no-op and documented it as "Reserved for future
+   * escape code implementation". This is that future, and the release's one
+   * intentional deviation from v1 — see `escape()` for how narrow it is.
+   */
+  escapeNextByte: boolean = false
+
   foregroundColor: number = 0xFF // White
   backgroundColor: number = 0x00 // Black
   foregroundColorNextByte: boolean = false
   backgroundColorNextByte: boolean = false
 
+  /**
+   * Where bytes the terminal *sends* go — `ESC 0x04`'s reply now, and Phase 5's
+   * DA/DSR reports later.
+   *
+   * Null until something claims the wire, and dropped on the floor while it is:
+   * a terminal with nothing on the other end has nowhere to put a reply, which
+   * is v1's rule for keystrokes applied in the same direction.
+   */
+  private onTransmit: ((bytes: number[]) => void) | null = null
+
   //
   // METHODS
-  // 
+  //
+
+  /** Register the sink for bytes the terminal sends. The store owns this. */
+  setTransmitCallback = (callback: ((bytes: number[]) => void) | null) => {
+    this.onTransmit = callback
+  }
+
+  /** Send bytes to the far end. A no-op when nothing has claimed the wire. */
+  transmit = (bytes: number[]) => {
+    if (bytes.length === 0) return
+    this.onTransmit?.(bytes)
+  }
+
+  /**
+   * Switch column mode — 40 columns at 320×240, or 80 at 640×480.
+   *
+   * An exact 2× of the 40-column grid in both axes: same 8×8 font, same square
+   * pixels, same 4:3, same 8 rows per cell in graphics mode. Only `cols` and
+   * `rows` change, so every command keeps its meaning and `SET COLUMN`/`SET ROW`
+   * extend for free — both already take their operand modulo the dimension.
+   *
+   * The screen is cleared and the cursor homed **even when the mode is already
+   * the one asked for**, which is DECCOLM's behaviour on real hardware and the
+   * reason `ESC 0x01` is a usable "known state" preamble.
+   */
+  setColumns = (columns: Columns) => {
+    const geometry = GEOMETRIES[columns]
+    if (geometry === undefined) return
+
+    this.screen.resize(geometry.cols, geometry.rows, this.foregroundColor, this.backgroundColor)
+    this.column = 0
+    this.row = 0
+    this.offset = 0
+  }
+
+  /** Switch personality. Phase 5 is what makes `vt100` parse differently. */
+  setPersonality = (personality: Personality) => {
+    this.personality = personality
+  }
 
   reset = () => {
     this.column = 0
@@ -102,8 +210,20 @@ export class VTAC {
     this.backgroundColorNextByte = false
     this.bellDurationNextByte = false
     this.bellFrequencyNextByte = false
+    this.escapeNextByte = false
     this.bellQueue = []
-    this.screen.reset()
+
+    // Back to the *configured* defaults, not to hard-coded ones: someone who
+    // launched `vtac --columns 80 --mode vt100` is running an 80-column VT-100,
+    // and a `0x04` from the far end should not quietly demote their terminal.
+    this.personality = this.defaultPersonality
+
+    const geometry = GEOMETRIES[this.defaultColumns]
+    if (this.screen.cols !== geometry.cols || this.screen.rows !== geometry.rows) {
+      this.screen.resize(geometry.cols, geometry.rows)
+    } else {
+      this.screen.reset()
+    }
   }
 
   bell = () => {
@@ -268,6 +388,72 @@ export class VTAC {
   }
 
   //
+  // ESCAPE
+  //
+
+  /**
+   * The second byte of an ESC sequence — the release's one intentional
+   * deviation from v1, and a deliberately narrow one.
+   *
+   * | Sequence | Effect |
+   * | --- | --- |
+   * | `ESC 0x01` | 40-column mode (320×240) |
+   * | `ESC 0x02` | 80-column mode (640×480) |
+   * | `ESC 0x03` | Enter VT-100 personality |
+   * | `ESC 0x04` | Query — reply with personality, columns, rows |
+   * | `ESC 0x1B` | Literal `0x1B` as data |
+   *
+   * **Anything else is re-dispatched as an ordinary byte**, which is what makes
+   * this deviation as small as it can be: a stream that carried a stray ESC
+   * followed by something meaningless behaves exactly as it did under v1, where
+   * ESC was a no-op and the byte after it was just the next command. Discarding
+   * the byte instead would have been a second deviation, and one that eats a
+   * cursor move (`ESC 0x1C`) rather than nothing at all.
+   */
+  escape = (data: number) => {
+    switch (data) {
+      case 0x01: // 40-COLUMN MODE
+        this.setColumns(40)
+        break
+      case 0x02: // 80-COLUMN MODE
+        this.setColumns(80)
+        break
+      case 0x03: // VT-100 PERSONALITY
+        this.setPersonality('vt100')
+        break
+      case 0x04: // QUERY
+        this.transmit(this.queryResponse())
+        break
+      case 0x1B: // LITERAL ESCAPE
+        this.data(0x1B)
+        break
+      default:
+        // v1's no-op ESC, preserved exactly.
+        this.parse(data)
+        break
+    }
+  }
+
+  /**
+   * The reply to `ESC 0x04`, as five bytes: the query echoed back so the far end
+   * can frame it, then personality, columns and rows.
+   *
+   * Columns and rows go out as their literal counts — `40 30` or `80 60` — not
+   * as a mode index, so a host can size its output without a lookup table and
+   * without this becoming a compatibility problem if a third geometry ever
+   * appears.
+   */
+  queryResponse = (): number[] => {
+    return [
+      0x1B,
+      0x04,
+      this.personality === 'vt100' ? 0x01 : 0x00,
+      this.screen.cols,
+      this.screen.rows
+    ]
+  }
+
+  //
   // HELPERS
   //
 
@@ -284,6 +470,14 @@ export class VTAC {
   //
 
   parse = (data: number) => {
+    // First, because `escape` may re-dispatch the byte through here and the
+    // flag has to be down by then or an unrecognised sequence would loop.
+    if (this.escapeNextByte) {
+      this.escapeNextByte = false
+      this.escape(data)
+      return
+    }
+
     if (this.cursorCharNextByte) {
       this.cursorChar = data
       this.cursorCharNextByte = false
@@ -414,7 +608,7 @@ export class VTAC {
         this.dataNextByte = true
         break
       case (data == 0x1B): // ESCAPE
-        // Reserved for future ANSI escape code handling
+        this.escapeNextByte = true
         break
       case (data == 0x1C): // CURSOR LEFT
         this.cursor('left')

@@ -136,14 +136,39 @@ try {
     'bellFrequency'
   ]
 
+  /**
+   * Phase 4 gave `0x1B` a meaning, and it is the release's one intentional
+   * deviation from v1 — where ESC was a no-op, the byte after it now selects an
+   * extension. A random stream hits that within a few thousand bytes, and once
+   * it does the two terminals are legitimately different machines, so there is
+   * nothing left to compare on that stream.
+   *
+   * Such a divergence is therefore reported as `esc` rather than `FAIL`: the
+   * bytes before it were still checked, and anything that diverges *without* an
+   * ESC pending is still a real failure. The flag is read off the current
+   * terminal's own state rather than guessed from the preceding byte, so an ESC
+   * that was swallowed as an operand (`0x18 0x1B` — set foreground to $1B) is
+   * correctly not counted.
+   */
   function compare(stream) {
     const current = new Current()
     const reference = new Reference()
 
     for (let i = 0; i < stream.bytes.length; i++) {
       const byte = stream.bytes[i]
+      const escaping = current.escapeNextByte === true
+
       current.parse(byte)
       reference.parse(byte)
+
+      const diverged =
+        Buffer.compare(current.buffer, reference.buffer) !== 0 ||
+        STATE_FIELDS.some((field) => current[field] !== reference[field]) ||
+        current.bellQueue.length !== reference.bellQueue.length
+
+      if (diverged && escaping) {
+        return { expected: true, byteIndex: i, byte }
+      }
 
       if (Buffer.compare(current.buffer, reference.buffer) !== 0) {
         const a = current.buffer
@@ -181,20 +206,30 @@ try {
   console.log(`Comparing src/core against ${REF}:src/core/VTAC.ts\n`)
 
   let failures = 0
+  let deviations = 0
   let bytesChecked = 0
 
   for (const stream of streams) {
     const started = Date.now()
     const failure = compare(stream)
-    bytesChecked += stream.bytes.length
+    const elapsed = Date.now() - started
 
     if (failure === null) {
-      const elapsed = Date.now() - started
+      bytesChecked += stream.bytes.length
       console.log(
         `  ok    ${stream.name.padEnd(28)} ${String(stream.bytes.length).padStart(6)} bytes` +
           (VERBOSE ? ` (${elapsed}ms)` : '')
       )
+    } else if (failure.expected) {
+      deviations++
+      bytesChecked += failure.byteIndex
+      console.log(
+        `  esc   ${stream.name.padEnd(28)} ${String(failure.byteIndex).padStart(6)} bytes` +
+          `, then ESC 0x${failure.byte.toString(16).padStart(2, '0')}` +
+          (VERBOSE ? ` (${elapsed}ms)` : '')
+      )
     } else {
+      bytesChecked += failure.byteIndex
       failures++
       console.log(`  FAIL  ${stream.name}`)
       console.log(
@@ -210,6 +245,13 @@ try {
     `\n${total - failures}/${total} streams identical ` +
       `(${bytesChecked.toLocaleString()} bytes, full framebuffer compared after every one)`
   )
+
+  if (deviations > 0) {
+    console.log(
+      `${deviations} stopped at an ESC extension — Phase 4's one intentional ` +
+        `deviation from v1, and the only divergence this tool accepts.`
+    )
+  }
 
   if (failures > 0) {
     console.log('\nThe cell model is not behaviour-preserving. Phase 2 is not done.')

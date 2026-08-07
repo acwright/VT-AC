@@ -36,34 +36,39 @@ export interface CellRect {
  * into `plane` from outside are invisible to damage tracking, by construction.
  */
 export class Screen {
-  /** Cells across. */
-  readonly cols: number
+  /**
+   * Cells across.
+   *
+   * Not `readonly`: `resize()` is how 80-column mode happens, and it is the
+   * only thing that writes this or any of the four below.
+   */
+  cols!: number
   /** Cells down. */
-  readonly rows: number
+  rows!: number
   /** Framebuffer width in pixels, `cols * 8`. */
-  readonly width: number
+  width!: number
   /** Framebuffer height in pixels, `rows * 8`. */
-  readonly height: number
+  height!: number
   /** Number of cells, `cols * rows`. Makes a `Screen` usable as `CellPlanes`. */
-  readonly count: number
+  count!: number
 
   /** `CellKind` per cell. */
-  kind: Uint8Array
+  kind!: Uint8Array
   /** Glyph index per cell. */
-  codes: Uint8Array
+  codes!: Uint8Array
   /** RGB332 foreground per cell. */
-  fg: Uint8Array
+  fg!: Uint8Array
   /** RGB332 background per cell. */
-  bg: Uint8Array
+  bg!: Uint8Array
   /** `Attr` bitfield per cell. */
-  attrs: Uint8Array
+  attrs!: Uint8Array
   /** `count * 64` RGB332 pixels, for `Pixels` cells. */
-  pixels: Uint8Array
+  pixels!: Uint8Array
   /** Per-cell "needs rasterizing" flag. */
-  dirty: Uint8Array
+  dirty!: Uint8Array
 
   /** The RGB332 framebuffer. Row-major, `width * height` bytes. */
-  plane: Uint8Array
+  plane!: Uint8Array
 
   /** Phase of the 500ms blink clock. `false` hides `Attr.BLINK` cells. */
   blinkOn = true
@@ -79,6 +84,26 @@ export class Screen {
   private readonly scratch = new Uint8Array(8)
 
   constructor(cols = 40, rows = 30, fg = 0xff, bg = 0x00) {
+    this.resize(cols, rows, fg, bg)
+
+    // The planes start blank and the framebuffer starts filled to match, so
+    // nothing is dirty and nothing is damaged: a screen nobody has written to
+    // costs the renderer nothing. `resize` damages everything, which is right
+    // for a mode switch and wrong for a screen that has never been shown.
+    this.takeDamage()
+  }
+
+  /**
+   * Change the geometry, discarding everything on screen.
+   *
+   * Every plane is reallocated at the new size and the framebuffer with them,
+   * so nothing stale survives a switch and `VTAC.buffer` hands back a view of
+   * the right length. Content is *not* carried over: that is DECCOLM's
+   * behaviour on real hardware, and it avoids inventing a reflow policy no VT
+   * ever had. The whole screen is left damaged, since the renderer's backing
+   * store has to be rebuilt at the new size anyway.
+   */
+  resize(cols: number, rows: number, fg = 0xff, bg = 0x00): void {
     this.cols = cols
     this.rows = rows
     this.width = cols * 8
@@ -94,10 +119,9 @@ export class Screen {
     this.pixels = planes.pixels
     this.dirty = planes.dirty
 
-    // The planes start blank and the framebuffer starts filled to match, so
-    // nothing is dirty and nothing is damaged: a screen nobody has written to
-    // costs the renderer nothing.
     this.plane = new Uint8Array(this.width * this.height).fill(bg)
+    this.dirtyCount = 0
+    this.damageAll()
   }
 
   /** Cell index for a column/row pair. */

@@ -1,6 +1,8 @@
 import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import { VTAC } from '@core/VTAC'
+import type { Columns } from '@core/VTAC'
+import type { Personality } from '@core/types'
 
 /**
  * The terminal, and everything the app needs to talk to it.
@@ -21,13 +23,39 @@ import { VTAC } from '@core/VTAC'
 export const useTerminalStore = defineStore('terminal', () => {
   const vtac = shallowRef(new VTAC())
 
-  // Geometry, mirrored reactively so the canvas can size itself. Fixed at
-  // 40×30 until Phase 4 makes `setColumns` a thing; the mirror exists now so
-  // that when it does, the canvas already follows.
+  // Geometry and personality, mirrored reactively so the canvas can size itself
+  // and the control bar (Phase 7) can read them. `VTAC` is a plain class with
+  // no reactivity of its own, so anything that can change it — a click, a CLI
+  // flag, or an `ESC 0x01` arriving over the wire — has to come back through
+  // `sync()`.
   const cols = ref(vtac.value.screen.cols)
   const rows = ref(vtac.value.screen.rows)
   const width = computed(() => cols.value * 8)
   const height = computed(() => rows.value * 8)
+  const personality = ref<Personality>(vtac.value.personality)
+
+  function sync(): void {
+    cols.value = vtac.value.screen.cols
+    rows.value = vtac.value.screen.rows
+    personality.value = vtac.value.personality
+  }
+
+  /**
+   * Switch column mode. The control bar's `40`/`80` readout, and the `-c` flag.
+   *
+   * Clears the screen and homes the cursor, exactly as `ESC 0x01`/`ESC 0x02`
+   * do — this *is* that path, so the two cannot drift apart.
+   */
+  function setColumns(columns: Columns): void {
+    vtac.value.setColumns(columns)
+    sync()
+  }
+
+  /** Switch personality. The control bar's `VT-AC`/`VT-100` readout, and `-m`. */
+  function setPersonality(next: Personality): void {
+    vtac.value.setPersonality(next)
+    sync()
+  }
 
   /**
    * Whether there is an open serial port to transmit into.
@@ -49,6 +77,11 @@ export const useTerminalStore = defineStore('terminal', () => {
   function setTransmitCallback(callback: ((bytes: number[]) => void) | null): void {
     onTransmit = callback
   }
+
+  // The terminal answers `ESC 0x04` — and, from Phase 5, DA and DSR — on the
+  // same wire the keyboard uses, so it transmits through the store rather than
+  // holding a second reference to the serial link.
+  vtac.value.setTransmitCallback((bytes) => transmit(bytes))
 
   /** Register the handler woken when a bell lands in the queue. `useBell`. */
   function setBellCallback(callback: (() => void) | null): void {
@@ -72,8 +105,16 @@ export const useTerminalStore = defineStore('terminal', () => {
    * comparison per byte and rings it the moment it arrives.
    */
   function parse(byte: number): void {
-    vtac.value.parse(byte)
-    if (onBell !== null && vtac.value.bellQueue.length > 0) onBell()
+    const terminal = vtac.value
+    terminal.parse(byte)
+    if (onBell !== null && terminal.bellQueue.length > 0) onBell()
+
+    // `ESC 0x01`/`0x02`/`0x03` change geometry and personality from inside the
+    // byte stream, and nothing about `VTAC` is reactive. Two comparisons per
+    // byte is the price of not having to poll or wrap every mutation.
+    if (terminal.screen.cols !== cols.value || terminal.personality !== personality.value) {
+      sync()
+    }
   }
 
   /** Feed a run of received bytes — a serial chunk, a dropped file, a paste. */
@@ -81,9 +122,16 @@ export const useTerminalStore = defineStore('terminal', () => {
     for (let i = 0; i < data.length; i++) parse(data[i])
   }
 
-  /** `0x04` — full reset. The control bar's Reset button, Phase 7. */
+  /**
+   * `0x04` — full reset. The control bar's Reset button, Phase 7.
+   *
+   * Returns to the *configured* geometry and personality rather than to 40
+   * columns of native, so a reset undoes what the stream did and not what the
+   * user launched with.
+   */
   function reset(): void {
     vtac.value.reset()
+    sync()
   }
 
   /** `0x0C` — clear the screen, keeping colours and cursor state. */
@@ -97,7 +145,10 @@ export const useTerminalStore = defineStore('terminal', () => {
     rows,
     width,
     height,
+    personality,
     serialConnected,
+    setColumns,
+    setPersonality,
     setTransmitCallback,
     setBellCallback,
     transmit,

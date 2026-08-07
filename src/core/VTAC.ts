@@ -1,4 +1,5 @@
 import { CHARACTERS } from './Font'
+import { Screen } from './Screen'
 
 export class VTAC {
 
@@ -7,7 +8,52 @@ export class VTAC {
   static WIDTH: number = VTAC.COLUMNS * 8
   static HEIGHT: number = VTAC.ROWS * 8
 
-  buffer: Buffer<ArrayBuffer> = Buffer.alloc(VTAC.WIDTH * VTAC.HEIGHT).fill(0x00)
+  /**
+   * Where the screen actually lives.
+   *
+   * v1 owned a framebuffer and drew into it. v2 owns a `Screen`, which owns the
+   * cells and derives the framebuffer from them; every drawing method below is
+   * now a two-line delegation. The renderer reads `screen.plane` and
+   * `screen.takeDamage()` directly; `buffer` is for everything that predates it.
+   */
+  readonly screen: Screen = new Screen(VTAC.COLUMNS, VTAC.ROWS)
+
+  private bufferView: Buffer<ArrayBuffer> | null = null
+  private bufferSource: Uint8Array | null = null
+
+  /**
+   * The RGB332 framebuffer, as v1 exposed it.
+   *
+   * Derived now rather than authoritative: reading it rasterizes whatever cells
+   * are outstanding and hands back a `Buffer` **view onto the screen's own
+   * memory**, not a copy. Writes through it therefore land on the screen and
+   * stay there, which is what keeps `VTAC.test.ts` — which pokes pixels in and
+   * then scrolls them around — meaningful against the new model.
+   */
+  get buffer(): Buffer<ArrayBuffer> {
+    this.screen.rasterize()
+
+    const plane = this.screen.plane
+    if (this.bufferView === null || this.bufferSource !== plane) {
+      this.bufferSource = plane
+      this.bufferView = Buffer.from(
+        plane.buffer as ArrayBuffer,
+        plane.byteOffset,
+        plane.byteLength
+      ) as Buffer<ArrayBuffer>
+    }
+    return this.bufferView
+  }
+
+  /** Framebuffer width in pixels. Instance geometry; the static is the default. */
+  get width(): number {
+    return this.screen.width
+  }
+
+  /** Framebuffer height in pixels. Instance geometry; the static is the default. */
+  get height(): number {
+    return this.screen.height
+  }
 
   mode: 'text' | 'graphics' = 'text'
 
@@ -57,7 +103,7 @@ export class VTAC {
     this.bellDurationNextByte = false
     this.bellFrequencyNextByte = false
     this.bellQueue = []
-    this.buffer.fill(0x00)
+    this.screen.reset()
   }
 
   bell = () => {
@@ -90,15 +136,15 @@ export class VTAC {
   }
 
   tab = () => {
-    this.column = Math.min((Math.floor(this.column / 4) + 1) * 4, VTAC.COLUMNS - 1)
+    this.column = Math.min((Math.floor(this.column / 4) + 1) * 4, this.screen.cols - 1)
     this.offset = 0
   }
 
   lineFeed = () => {
     let nextRow = this.row + 1
 
-    if (nextRow >= VTAC.ROWS) {
-      nextRow = VTAC.ROWS - 1
+    if (nextRow >= this.screen.rows) {
+      nextRow = this.screen.rows - 1
       this.scroll('up')
     }
 
@@ -112,93 +158,17 @@ export class VTAC {
   }
 
   deleteTo = (destination: 'startOfLine' | 'endOfLine' | 'startOfScreen' | 'endOfScreen') => {
-    switch (destination) {
-      case 'startOfLine':
-        // Clear from start of current line to current cursor position
-        for (let col = 0; col <= this.column; col++) {
-          this.clearCharacterCell(col, this.row)
-        }
-        break
-      case 'endOfLine':
-        // Clear from current cursor position to end of current line
-        for (let col = this.column; col < VTAC.COLUMNS; col++) {
-          this.clearCharacterCell(col, this.row)
-        }
-        break
-      case 'startOfScreen':
-        // Clear from start of screen to current cursor position
-        for (let row = 0; row < this.row; row++) {
-          for (let col = 0; col < VTAC.COLUMNS; col++) {
-            this.clearCharacterCell(col, row)
-          }
-        }
-        // Clear partial line up to and including cursor
-        for (let col = 0; col <= this.column; col++) {
-          this.clearCharacterCell(col, this.row)
-        }
-        break
-      case 'endOfScreen':
-        // Clear from current cursor position to end of screen
-        for (let col = this.column; col < VTAC.COLUMNS; col++) {
-          this.clearCharacterCell(col, this.row)
-        }
-        // Clear remaining lines
-        for (let row = this.row + 1; row < VTAC.ROWS; row++) {
-          for (let col = 0; col < VTAC.COLUMNS; col++) {
-            this.clearCharacterCell(col, row)
-          }
-        }
-        break
-    }
+    this.screen.deleteTo(
+      destination,
+      this.column,
+      this.row,
+      this.foregroundColor,
+      this.backgroundColor
+    )
   }
 
   scroll = (direction: 'left' | 'right' | 'up' | 'down') => {
-    switch (direction) {
-      case 'left':
-        // Shift all character cells one position to the left
-        for (let row = 0; row < VTAC.ROWS; row++) {
-          for (let col = 0; col < VTAC.COLUMNS - 1; col++) {
-            this.copyCharacterCell(col + 1, row, col, row)
-          }
-          // Fill rightmost column with background color
-          this.clearCharacterCell(VTAC.COLUMNS - 1, row)
-        }
-        break
-      case 'right':
-        // Shift all character cells one position to the right
-        for (let row = 0; row < VTAC.ROWS; row++) {
-          for (let col = VTAC.COLUMNS - 1; col > 0; col--) {
-            this.copyCharacterCell(col - 1, row, col, row)
-          }
-          // Fill leftmost column with background color
-          this.clearCharacterCell(0, row)
-        }
-        break
-      case 'up':
-        // Shift all character cells one position up
-        for (let row = 0; row < VTAC.ROWS - 1; row++) {
-          for (let col = 0; col < VTAC.COLUMNS; col++) {
-            this.copyCharacterCell(col, row + 1, col, row)
-          }
-        }
-        // Fill bottom row with background color
-        for (let col = 0; col < VTAC.COLUMNS; col++) {
-          this.clearCharacterCell(col, VTAC.ROWS - 1)
-        }
-        break
-      case 'down':
-        // Shift all character cells one position down
-        for (let row = VTAC.ROWS - 1; row > 0; row--) {
-          for (let col = 0; col < VTAC.COLUMNS; col++) {
-            this.copyCharacterCell(col, row - 1, col, row)
-          }
-        }
-        // Fill top row with background color
-        for (let col = 0; col < VTAC.COLUMNS; col++) {
-          this.clearCharacterCell(col, 0)
-        }
-        break
-    }
+    this.screen.scroll(direction, this.foregroundColor, this.backgroundColor)
   }
 
   cursor = (direction: 'left' | 'right' | 'up' | 'down') => {
@@ -209,7 +179,7 @@ export class VTAC {
         }
         break
       case 'right':
-        if (this.column < VTAC.COLUMNS - 1) {
+        if (this.column < this.screen.cols - 1) {
           this.column++
         }
         break
@@ -219,7 +189,7 @@ export class VTAC {
         }
         break
       case 'down':
-        if (this.row < VTAC.ROWS - 1) {
+        if (this.row < this.screen.rows - 1) {
           this.row++
         }
         break
@@ -247,29 +217,23 @@ export class VTAC {
   //
 
   insertTextData = (data: number) => {
-    const character = CHARACTERS[data]
-    const startRow = this.row * 8
-    const startColumn = this.column * 8
-    
-    // Render 8x8 character bitmap
-    for (let y = 0; y < 8; y++) {
-      const rowByte = character[y]
-      const bufferRowStart = (startRow + y) * VTAC.WIDTH
-      
-      for (let x = 0; x < 8; x++) {
-        const bit = (rowByte >> (7 - x)) & 1
-        const color = bit ? this.foregroundColor : this.backgroundColor
-        this.buffer[bufferRowStart + startColumn + x] = color
-      }
-    }
-    
+    // The glyph and its colours are recorded, not rasterized — `Screen` renders
+    // it on demand, which is what makes the cell re-readable and re-colourable.
+    this.screen.putGlyph(
+      this.column,
+      this.row,
+      data,
+      this.foregroundColor,
+      this.backgroundColor
+    )
+
     // Move to next character position
     this.column++
-    if (this.column >= VTAC.COLUMNS) {
+    if (this.column >= this.screen.cols) {
       this.column = 0
       this.row++
-      if (this.row >= VTAC.ROWS) {
-        this.row = VTAC.ROWS - 1
+      if (this.row >= this.screen.rows) {
+        this.row = this.screen.rows - 1
         this.scroll('up')
       }
     }
@@ -277,28 +241,26 @@ export class VTAC {
   }
 
   insertGraphicsData = (data: number) => {
-    // Calculate starting pixel position (offset is the row within the 8x8 block)
-    const pixelRow = this.row * 8 + this.offset
-    const startColumn = this.column * 8
-    const bufferRowStart = pixelRow * VTAC.WIDTH
-    
-    // Write 8 pixels horizontally - each bit in data represents one pixel
-    // Bit 7 (MSB) is leftmost pixel, bit 0 (LSB) is rightmost pixel
-    for (let i = 0; i < 8; i++) {
-      const bit = (data >> (7 - i)) & 1
-      const color = bit ? this.foregroundColor : this.backgroundColor
-      this.buffer[bufferRowStart + startColumn + i] = color
-    }
-    
+    // `offset` is the row within the 8x8 block. Bit 7 (MSB) is the leftmost
+    // pixel, bit 0 (LSB) the rightmost.
+    this.screen.putPixelRow(
+      this.column,
+      this.row,
+      this.offset,
+      data,
+      this.foregroundColor,
+      this.backgroundColor
+    )
+
     // Move to next location in pixel array
     this.offset++
     if (this.offset >= 8) {
       this.offset = 0
       this.column++
-      if (this.column >= VTAC.COLUMNS) {
+      if (this.column >= this.screen.cols) {
         this.column = 0
         this.row++
-        if (this.row >= VTAC.ROWS) {
+        if (this.row >= this.screen.rows) {
           this.row = 0
         }
       }
@@ -310,33 +272,11 @@ export class VTAC {
   //
 
   copyCharacterCell = (sourceCol: number, sourceRow: number, destCol: number, destRow: number) => {
-    const sourceStartRow = sourceRow * 8
-    const sourceStartColumn = sourceCol * 8
-    const destStartRow = destRow * 8
-    const destStartColumn = destCol * 8
-    
-    // Copy 8x8 pixel block
-    for (let y = 0; y < 8; y++) {
-      const sourceBufferRowStart = (sourceStartRow + y) * VTAC.WIDTH
-      const destBufferRowStart = (destStartRow + y) * VTAC.WIDTH
-      for (let x = 0; x < 8; x++) {
-        this.buffer[destBufferRowStart + destStartColumn + x] = 
-          this.buffer[sourceBufferRowStart + sourceStartColumn + x]
-      }
-    }
+    this.screen.copyCell(sourceCol, sourceRow, destCol, destRow)
   }
 
   clearCharacterCell = (col: number, row: number) => {
-    const startRow = row * 8
-    const startColumn = col * 8
-    
-    // Clear 8x8 pixel block with background color
-    for (let y = 0; y < 8; y++) {
-      const bufferRowStart = (startRow + y) * VTAC.WIDTH
-      for (let x = 0; x < 8; x++) {
-        this.buffer[bufferRowStart + startColumn + x] = this.backgroundColor
-      }
-    }
+    this.screen.clearCell(col, row, this.foregroundColor, this.backgroundColor)
   }
 
   //
@@ -350,13 +290,13 @@ export class VTAC {
       return
     }
     if (this.columnNextByte) {
-      this.column = data % VTAC.COLUMNS // 0 to COLUMNS-1
+      this.column = data % this.screen.cols // 0 to cols-1
       this.offset = 0
       this.columnNextByte = false
       return
     }
     if (this.rowNextByte) {
-      this.row = data % VTAC.ROWS // 0 to ROWS-1
+      this.row = data % this.screen.rows // 0 to rows-1
       this.offset = 0
       this.rowNextByte = false
       return
@@ -429,7 +369,7 @@ export class VTAC {
         this.mode == 'text' ? this.mode = 'graphics' : this.mode = 'text'
         break
       case (data == 0x0C): // CLEAR SCREEN
-        this.buffer.fill(this.backgroundColor)
+        this.screen.clear(this.foregroundColor, this.backgroundColor)
         break
       case (data == 0x0D): // CARRIAGE RETURN
         this.carriageReturn()

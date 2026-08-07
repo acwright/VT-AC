@@ -265,6 +265,20 @@ differ. A `Pixels` cell therefore stores its own rendered 8×8 block, which is
 exactly what the framebuffer holds today. `Text` cells store a glyph plus colors
 and rasterize on demand.
 
+**One thing the sketch above leaves out.** The rasterized plane cannot be a
+throwaway: `VTAC.test.ts` writes pixels *into* `vtac.buffer` and then expects
+`scroll` and `copyCharacterCell` to move them. So `Screen` keeps the plane as a
+persistent framebuffer, only ever re-rendering cells whose description changed,
+and `copyCell` moves a cell's rendered pixels alongside its description. Clean
+cells are never repainted, which is what lets a write straight into the plane
+survive. `buffer` hands back a `Buffer` *view* of that memory, not a copy.
+
+That also splits one concept in two: `dirty` is per-cell, "the rasterizer has
+not caught up with this description"; damage is a rectangle, "this part of the
+plane changed since the renderer last looked". A scroll moves pixels for cells
+that were never dirty, so Phase 3's `putImageData` bounds come from
+`takeDamage()`, not from the dirty flags.
+
 **Consequences worth having.** `copyCharacterCell`/`clearCharacterCell` become
 plane operations instead of 64 pixel writes each — scrolling gets *faster* than
 v1, not slower. A `Screen` instance owns its planes, so an alternate screen
@@ -282,15 +296,34 @@ buffer (Phase 5) is a second `Screen`, swapped by reference.
    `BLINK` (gated on the 500ms clock). Pixels cells `set()` their block directly.
 4. `VTAC.ts` keeps its entire public surface — `parse`, `reset`, `scroll`,
    `cursor`, `deleteTo`, `bell`, `column`, `row`, `mode`, `foregroundColor`, … —
-   and delegates storage to `Screen`.
+   and delegates storage to `Screen`. Every `VTAC.COLUMNS`/`ROWS` reference in
+   its own methods becomes `this.screen.cols`/`rows`, so Phase 4 has nothing
+   left to chase; the statics stay as the 40-column defaults.
 5. **`get buffer()`** on `VTAC` — rasterizes and returns the RGB332 plane as a
    `Buffer`. This is what keeps `VTAC.test.ts` passing unmodified.
+6. `screen.test.ts` — the surface `VTAC.test.ts` cannot reach: cell readback,
+   the four attributes, a graphics row landing on a glyph, damage accounting,
+   and two `Screen`s staying independent, which is the alt-screen premise.
 
 **Done when:** `npm test` passes with **zero edits to `VTAC.test.ts`**, and a
-side-by-side run of `examples/characters.bin`, `examples/palette.bin` and
-`examples/bell.bin` through the v1 SDL binary and the new core produces
-byte-identical `buffer` output. Write that comparison as a throwaway script; it
-is the strongest evidence available that the refactor is behavior-preserving.
+side-by-side run of the examples through v1 and the new core produces
+byte-identical `buffer` output.
+
+`npm run verify:cellmodel` is that comparison. The oracle is not the v1 SDL
+binary — SDL left with Phase 0, and the binary's value was never the window, it
+was the terminal underneath it. The script instead pulls the pre-refactor
+`src/core/VTAC.ts` out of git (`--ref`, default `HEAD`), transpiles it and the
+current core side by side, and runs both. Using v1's actual code rather than a
+reimplementation is what keeps the oracle from absorbing the refactor's
+assumptions.
+
+It compares the **whole framebuffer after every byte**, plus cursor, mode,
+colors, bell state and queue depth — not just the final image, so a divergence
+that later heals is still caught. The three `examples/*.bin` files are the
+weakest part of it: they never scroll, never use `deleteTo`, and never mix text
+and graphics in one cell. Eleven seeded pseudo-random streams do — eight uniform
+over all 256 bytes, three weighted towards text and line feeds so the screen
+fills and scrolls repeatedly. 14 streams, 61,532 bytes, all identical.
 
 ---
 

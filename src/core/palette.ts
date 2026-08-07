@@ -96,6 +96,21 @@ export function rgbToRGB332(r: number, g: number, b: number): number {
   )
 }
 
+/**
+ * One step brighter, per channel — how the rasterizer renders `Attr.BOLD`.
+ *
+ * A VT100 rendered bold as extra beam intensity, which on an RGB332 framebuffer
+ * has one honest analogue: raise each channel to the next representable level.
+ * Channels already at maximum stay put, so bold on white is white rather than
+ * wrapping to black.
+ */
+export function brightenRGB332(value: number): number {
+  const r = Math.min(((value >> 5) & 0x07) + 1, 0x07)
+  const g = Math.min(((value >> 2) & 0x07) + 1, 0x07)
+  const b = Math.min((value & 0x03) + 1, 0x03)
+  return (r << 5) | (g << 2) | b
+}
+
 /** The xterm 256-colour palette, as 24-bit RGB. */
 function xterm256RGB(index: number): [number, number, number] {
   // 0–15: the ANSI system colours, at xterm's default intensities.

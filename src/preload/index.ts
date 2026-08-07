@@ -1,10 +1,59 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import { IPC } from '../shared/types'
+import type { AppSettings, CliShimStatus, PortInfo, SerialConfig, SerialStatus } from '../shared/types'
+import type { AppApi } from '../shared/api'
 
-// `window.api` gains app / window / boot / serial / settings / cli in Phase 6.
-// Until then it exists only so the renderer's `isElectron` check — the same
-// check that selects Web Serial in the browser build — has something to find.
-const api = {}
+const api: AppApi = {
+  app: {
+    getVersion: (): Promise<string> => ipcRenderer.invoke(IPC.APP_GET_VERSION)
+  },
+
+  window: {
+    toggleFullscreen: (): Promise<void> => ipcRenderer.invoke(IPC.WINDOW_TOGGLE_FULLSCREEN),
+    isFullscreen: (): Promise<boolean> => ipcRenderer.invoke(IPC.WINDOW_IS_FULLSCREEN),
+    onFullscreenChanged: (callback: (value: boolean) => void): (() => void) => {
+      const handler = (_: Electron.IpcRendererEvent, value: boolean): void => callback(value)
+      ipcRenderer.on(IPC.WINDOW_FULLSCREEN_CHANGED, handler)
+      return () => ipcRenderer.off(IPC.WINDOW_FULLSCREEN_CHANGED, handler)
+    }
+  },
+
+  boot: {
+    get: (): Promise<unknown | null> => ipcRenderer.invoke(IPC.BOOT_GET)
+  },
+
+  serial: {
+    listPorts: (): Promise<PortInfo[]> => ipcRenderer.invoke(IPC.SERIAL_LIST_PORTS),
+    connect: (path: string, config: SerialConfig): Promise<void> =>
+      ipcRenderer.invoke(IPC.SERIAL_CONNECT, path, config),
+    disconnect: (): Promise<void> => ipcRenderer.invoke(IPC.SERIAL_DISCONNECT),
+    send: (data: Uint8Array): void => ipcRenderer.send(IPC.SERIAL_SEND, data),
+    onData: (callback: (data: Uint8Array) => void): (() => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: Uint8Array): void => callback(data)
+      ipcRenderer.on(IPC.SERIAL_DATA, handler)
+      return () => ipcRenderer.off(IPC.SERIAL_DATA, handler)
+    },
+    onStatus: (callback: (status: SerialStatus) => void): (() => void) => {
+      const handler = (_: Electron.IpcRendererEvent, status: SerialStatus): void => callback(status)
+      ipcRenderer.on(IPC.SERIAL_STATUS, handler)
+      return () => ipcRenderer.off(IPC.SERIAL_STATUS, handler)
+    }
+  },
+
+  settings: {
+    get: (): Promise<AppSettings> => ipcRenderer.invoke(IPC.SETTINGS_GET),
+    set: (partial: Partial<AppSettings>): Promise<void> =>
+      ipcRenderer.invoke(IPC.SETTINGS_SET, partial)
+  },
+
+  cli: {
+    status: (): Promise<CliShimStatus> => ipcRenderer.invoke(IPC.CLI_STATUS),
+    install: (): Promise<{ ok: boolean; message: string }> => ipcRenderer.invoke(IPC.CLI_INSTALL),
+    uninstall: (): Promise<{ ok: boolean; message: string }> =>
+      ipcRenderer.invoke(IPC.CLI_UNINSTALL)
+  }
+}
 
 if (process.contextIsolated) {
   try {

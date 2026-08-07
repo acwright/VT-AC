@@ -60,6 +60,29 @@ export const useTerminalStore = defineStore('terminal', () => {
   }
 
   /**
+   * Adopt the saved geometry and personality as this terminal's *configuration*.
+   *
+   * Not the same as calling `setColumns` and `setPersonality`, which change only
+   * what the terminal is doing right now. `VTAC.defaultColumns` and
+   * `defaultPersonality` are what a reset returns to — `0x04`, and RIS from the
+   * far end — so a terminal launched in 80-column VT-100 mode that is sent
+   * `ESC c` has to come back up in 80-column VT-100 mode. Without this the
+   * first RIS an application sends silently drops the terminal to 40 columns of
+   * native, which is not a state anything on the wire asked for.
+   *
+   * Called once at start-up with the saved settings, and again by the Settings
+   * panel (Phase 7), which is choosing a default and not just a current value.
+   */
+  function configure(settings: { personality: Personality; columns: Columns }): void {
+    const terminal = vtac.value
+    terminal.defaultPersonality = settings.personality
+    terminal.defaultColumns = settings.columns
+    if (terminal.screen.cols !== settings.columns) terminal.setColumns(settings.columns)
+    if (terminal.personality !== settings.personality) terminal.setPersonality(settings.personality)
+    sync()
+  }
+
+  /**
    * A key event → the bytes to transmit, or `null` when the key sends nothing.
    *
    * Here rather than in `useKeyboard` because the answer depends on terminal
@@ -171,6 +194,7 @@ export const useTerminalStore = defineStore('terminal', () => {
     serialConnected,
     setColumns,
     setPersonality,
+    configure,
     keyBytes,
     setTransmitCallback,
     setBellCallback,

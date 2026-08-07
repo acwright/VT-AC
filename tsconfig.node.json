@@ -1,4 +1,5 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
   "include": [
     "electron.vite.config.*",
@@ -12,11 +13,12 @@
     "composite": true,
     "moduleResolution": "bundler",
     "types": ["electron-vite/node"],
-    "baseUrl": ".",
-    "paths": {
-      "@core/*": ["src/core/*"],
-      "@shared/*": ["src/shared/*"]
-    },
+    // No `paths` here on purpose. electron.vite.config.ts declares the @core /
+    // @shared aliases for the *renderer* only — main and preload are bundled by
+    // externalizeDepsPlugin with no alias resolution — so an aliased import in
+    // src/main would typecheck here and then fail at build. Main and preload
+    // use relative imports, as the EMULATOR's do.
+    //
     // src/core is shared with tsconfig.core.json (Jest) and tsconfig.cli.json,
     // neither of which enables these. The terminal core is written against its
     // own project's rules; main reaching into it to typecheck should not

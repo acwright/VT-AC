@@ -196,6 +196,50 @@ describe('SO and SI — shifting', () => {
   })
 })
 
+describe('DECSC and DECRC', () => {
+  it('save and restore the designation and the shift', () => {
+    // `vttest`'s save/restore screen is what this is: five characters of line
+    // drawing, a save, a detour, a restore, and five more that have to still be
+    // line drawing. Without it they come back as `q` and `` ` ``.
+    const { feed, at } = terminal()
+
+    feed('\x1b(0') // G0 = special graphics
+    feed('q')
+    feed('\x1b7') // DECSC
+    feed('\x1b(B') // G0 = ASCII again
+    feed('q')
+    feed('\x1b8') // DECRC — back to line drawing, and to column 1
+    feed('q')
+
+    expect(at(0, 0)).toBe(0xc4)
+    expect(at(1, 0)).toBe(0xc4)
+  })
+
+  it('restore the GL shift as well as the designations', () => {
+    const { feed, at } = terminal()
+
+    feed('\x1b)0') // G1 = special graphics
+    feed('\x0e') // SO — GL is G1
+    feed('\x1b7') // DECSC
+    feed('\x0f') // SI — back to G0, which is ASCII
+    feed('\x1b8') // DECRC
+    feed('q')
+
+    expect(at(0, 0)).toBe(0xc4)
+  })
+
+  it('take a copy rather than a reference to the live designation', () => {
+    const { feed, at } = terminal()
+
+    feed('\x1b7') // DECSC with all four slots at ASCII
+    feed('\x1b(0') // G0 = special graphics
+    feed('\x1b8') // DECRC — which has to undo that
+    feed('q')
+
+    expect(at(0, 0)).toBe(0x71)
+  })
+})
+
 describe('the UK set', () => {
   it('draws a pound sign where ASCII has a hash', () => {
     const { feed, at } = terminal()
@@ -344,6 +388,27 @@ describe('reports', () => {
     feed(`${CSI}3;7H`, `${CSI}6n`)
 
     expect(sent()).toBe('\x1b[3;7R')
+  })
+
+  it('answers DECREQTPARM, distinguishing the two requests', () => {
+    // `vttest`'s terminal-reports item asks for both. The leading 2 or 3 is the
+    // only thing that separates the answers: it says which request this is a
+    // reply to, and VT-AC reports unsolicited under neither.
+    const unsolicited = terminal()
+    unsolicited.feed(`${CSI}0x`)
+    expect(unsolicited.sent()).toBe('\x1b[2;1;1;112;112;1;0x')
+
+    const onRequest = terminal()
+    onRequest.feed(`${CSI}1x`)
+    expect(onRequest.sent()).toBe('\x1b[3;1;1;112;112;1;0x')
+  })
+
+  it('ignores a terminal-parameters request it does not have', () => {
+    const { feed, sent } = terminal()
+
+    feed(`${CSI}4x`)
+
+    expect(sent()).toBe('')
   })
 
   it('ignores a status request it does not have', () => {

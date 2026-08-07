@@ -133,7 +133,7 @@ export class Screen {
     this.pixels = planes.pixels
     this.dirty = planes.dirty
 
-    this.plane = new Uint8Array(this.width * this.height).fill(bg)
+    this.plane = new Uint8Array(this.width * this.height).fill(this.blankPixel(fg, bg))
     this.dirtyCount = 0
     this.damageAll()
   }
@@ -258,8 +258,27 @@ export class Screen {
     this.attrs.fill(Attr.NONE)
     this.dirty.fill(0)
     this.dirtyCount = 0
-    this.plane.fill(bg)
+    this.plane.fill(this.blankPixel(fg, bg))
     this.damageAll()
+  }
+
+  /**
+   * What a blank cell rasterizes to, as one RGB332 byte.
+   *
+   * `clear` and `resize` paint the framebuffer directly instead of marking
+   * every cell dirty — a full clear is one `fill` rather than 76,800 pixel
+   * writes, which is most of why v1's `0x0C` did not cost a frame. The price is
+   * that they are the two places the rasterizer's rules have to be restated,
+   * and DECSCNM is a rule: on a reversed screen a blank cell comes out in the
+   * *foreground* colour, because reverse video swaps the two and a blank cell
+   * is all background.
+   *
+   * `vttest`'s light-background screen is what caught this. Every cell the host
+   * had written came out reversed and every cell it had not stayed black, so
+   * the light background ended in a staircase down the middle of the screen.
+   */
+  private blankPixel(fg: number, bg: number): number {
+    return this.reverse ? fg : bg
   }
 
   /**

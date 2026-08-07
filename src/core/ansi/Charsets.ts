@@ -105,4 +105,29 @@ export class Charsets {
     this.g[3] = Charset.Ascii
     this.gl = 0
   }
+
+  /**
+   * A copy of the whole designation, for DECSC to hold and DECRC to put back.
+   *
+   * DECSC saves the character sets as well as the cursor and the attributes —
+   * it is one of the two things about it that surprise people, the other being
+   * that it survives an alternate-screen switch. `vttest`'s save/restore screen
+   * is what catches its absence: the five characters written after the restore
+   * come out as `q` and `` ` `` instead of `─` and `♦`.
+   */
+  save(): CharsetState {
+    return { g: [...this.g], gl: this.gl }
+  }
+
+  /** Adopt a state taken by `save`. */
+  restore(state: CharsetState): void {
+    for (let i = 0; i < 4; i++) this.g[i] = state.g[i]
+    this.gl = state.gl
+  }
+}
+
+/** What `Charsets.save` hands out and `Charsets.restore` takes back. */
+export interface CharsetState {
+  g: Charset[]
+  gl: number
 }

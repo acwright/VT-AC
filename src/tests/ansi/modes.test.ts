@@ -180,6 +180,31 @@ describe('DECSCNM — reverse screen', () => {
     expect(vtac.screen.plane[0]).toBe(0x00)
   })
 
+  it('survives an erase, which paints the framebuffer without the rasterizer', () => {
+    // The staircase `vttest` drew: a full clear fills `plane` in one pass
+    // rather than dirtying 1,200 cells, so it is the one place that has to
+    // restate the rasterizer's rule. On a reversed screen a blank cell is a
+    // field of *foreground*.
+    const { vtac, feed } = terminal()
+
+    feed(dec(DecMode.ReverseVideo, true))
+    feed(`${CSI}2J`)
+    vtac.screen.rasterize()
+
+    expect(vtac.screen.plane.every((pixel) => pixel === 0xff)).toBe(true)
+  })
+
+  it('reverses a screen widened while it was set', () => {
+    // `resize` allocates a new framebuffer and fills it the same way.
+    const { vtac, feed } = terminal()
+
+    feed(dec(DecMode.ReverseVideo, true))
+    vtac.setColumns(80)
+    vtac.screen.rasterize()
+
+    expect(vtac.screen.plane.every((pixel) => pixel === 0xff)).toBe(true)
+  })
+
   it('goes back on reset', () => {
     const { vtac, feed } = terminal()
 
@@ -262,15 +287,26 @@ describe('the cursor glyph', () => {
 })
 
 describe('DECCOLM — column mode', () => {
-  it('switches to 80 columns and back', () => {
+  it('switches to 80 columns', () => {
     const { vtac, feed } = terminal()
 
     feed(dec(DecMode.Columns, true))
     expect(vtac.screen.cols).toBe(80)
     expect(vtac.screen.rows).toBe(60)
+  })
+
+  it('reset also selects 80 columns, because that is what it means on a VT100', () => {
+    // `CSI ? 3 l` is "normal width", not "narrow": it opens vt100 terminfo's
+    // `rs2`, `tput init` and vttest's own start-up. Reading it as VT-AC's
+    // 40-column mode put every properly-initialised program on half a screen,
+    // which is what the conformance run caught.
+    const { vtac, feed } = terminal()
 
     feed(dec(DecMode.Columns, false))
-    expect(vtac.screen.cols).toBe(40)
+    expect(vtac.screen.cols).toBe(80)
+
+    feed(dec(DecMode.Columns, false))
+    expect(vtac.screen.cols).toBe(80)
   })
 
   it('clears the screen, homes the cursor and opens the margins', () => {

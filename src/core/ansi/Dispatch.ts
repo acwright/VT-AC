@@ -13,11 +13,13 @@
  *
  * ## What is here, and what is not
  *
- * Cursor movement, erasing, line and character editing, and scroll regions.
- * Still to come: SGR and colour (5.4), DECSET/DECRST and the alternate screen
- * (5.5), charsets, tab stops and reports (5.6).
+ * Cursor movement, erasing, line and character editing, scroll regions, SGR and
+ * colour, the mode flags and the alternate screen, character sets, tab stops
+ * and the reports. What is deliberately absent is in `docs/VT100-CONFORMANCE.md`
+ * with the reasoning: DECSTR and the secondary DA are VT220, and `ESC # 3`–`# 6`
+ * are double-width lines an 8×8 ROM on a fixed grid cannot draw.
  *
- * Everything not yet implemented is **silently ignored**, which is what a
+ * Everything not implemented is **silently ignored**, which is what a
  * terminal does with a sequence it does not know. It is not a crash and it is
  * not an escape sequence printed as text.
  */
@@ -25,6 +27,7 @@
 import { Attr } from '../Cell'
 import { Screen } from '../Screen'
 import { Charsets, charsetFor, slotFor } from './Charsets'
+import type { CharsetState } from './Charsets'
 import { AnsiMode, DecMode, Modes } from './Modes'
 import { applySGR, resetPen } from './SGR'
 import type { Pen } from './SGR'
@@ -37,9 +40,10 @@ const TAB_WIDTH = 8
 /**
  * What DECSC (`ESC 7`) stores and DECRC (`ESC 8`) puts back.
  *
- * Colours are in because they already exist; character attributes and the
- * charset selection join them as 5.4 and 5.6 introduce them, which is why this
- * is a record rather than two numbers.
+ * All of it, and not just the position: a VT100's DECSC takes the cursor, the
+ * graphic rendition and the character-set designation together, so that a host
+ * can shift into line drawing, save, go and do something else, and restore to
+ * find itself drawing boxes again. `vttest`'s save/restore screen is the check.
  */
 interface SavedCursor {
   column: number
@@ -48,6 +52,7 @@ interface SavedCursor {
   foreground: number
   background: number
   attrs: number
+  charsets: CharsetState
 }
 
 /**
@@ -427,6 +432,9 @@ export class Dispatch implements AnsiHandler, Pen {
       case 0x6e: // 'n' — DSR, device status report
         this.statusReport(seq.param(0))
         break
+      case 0x78: // 'x' — DECREQTPARM, request terminal parameters
+        this.terminalParameters(seq.param(0))
+        break
       case 0x68: // 'h' — SM, set mode
         this.ansiModes(seq, true)
         break
@@ -585,7 +593,8 @@ export class Dispatch implements AnsiHandler, Pen {
       pendingWrap: this.pendingWrap,
       foreground: this.foreground,
       background: this.background,
-      attrs: this.attrs
+      attrs: this.attrs,
+      charsets: this.charsets.save()
     }
   }
 
@@ -609,6 +618,7 @@ export class Dispatch implements AnsiHandler, Pen {
     this.foreground = saved.foreground
     this.background = saved.background
     this.attrs = saved.attrs
+    this.charsets.restore(saved.charsets)
     this.setRow(saved.row)
     this.setColumn(saved.column)
     this.pendingWrap = saved.pendingWrap && vtac.column === vtac.screen.cols - 1
@@ -745,10 +755,23 @@ export class Dispatch implements AnsiHandler, Pen {
         break
 
       case DecMode.Columns: // DECCOLM
-        // On a VT100 this is 80/132; VT-AC has no 132, so it drives the 40/80
-        // switch the terminal actually has. Clears the screen and homes, as
-        // DECCOLM does on real hardware.
-        vtac.setColumns(set ? 80 : 40)
+        // Both states select 80 columns, and that is not a shrug.
+        //
+        // On a VT100 DECCOLM is 132 (set) against 80 (reset) — *reset is the
+        // normal screen*, which is why every vt100 terminfo `rs2`, `tput init`
+        // and `vttest` itself opens with `CSI ? 3 l`. Driving that to VT-AC's
+        // 40-column mode, as this did until the conformance run, meant any
+        // program that initialised the terminal properly dropped it to half
+        // width before drawing a single character.
+        //
+        // So the mapping is by meaning rather than by position: 80 columns is
+        // the width a VT100 program is entitled to assume, and it is the widest
+        // VT-AC has, so it answers both the request for normal width and the
+        // request for 132. 40 columns is native geometry — reachable from
+        // `ESC 0x01`, the control bar and the settings panel, but not from a
+        // sequence whose reset state a VT100 program means as "not narrow".
+        // Clears the screen and homes either way, as DECCOLM does on hardware.
+        vtac.setColumns(80)
         break
 
       case DecMode.ReverseVideo: // DECSCNM
@@ -874,6 +897,32 @@ export class Dispatch implements AnsiHandler, Pen {
       const row = this.modes.origin ? vtac.row - this.top + 1 : vtac.row + 1
       this.reply(`\x1b[${row};${vtac.column + 1}R`)
     }
+  }
+
+  /**
+   * DECREQTPARM — "how is your serial line set up?"
+   *
+   * A VT100 report rather than a VT220 one, which is why it is answered where
+   * the secondary DA is not: `vttest`'s terminal-reports item asks for it, and
+   * a machine claiming to be a VT100 with AVO owes it a reply.
+   *
+   * `CSI 0 x` also grants permission to send the report unsolicited and `CSI 1 x`
+   * withdraws it; the two are distinguished only by the first parameter of the
+   * reply, 2 against 3. VT-AC never reports unsolicited either way, so nothing
+   * else here depends on which was asked.
+   *
+   * The remaining fields are fixed at no parity, 8 bits, 9600 in both
+   * directions, ×1 clock, no flags. They are a description of the line the
+   * terminal *thinks* it has, and the terminal does not have one: the port is
+   * the app's, the personality is the core's, and a core that had to be told
+   * the baud rate to answer a DEC report would be the wrong shape. 9600 is
+   * VT-AC's own default framing, so the answer is at least the truth about the
+   * machine as configured out of the box.
+   */
+  private terminalParameters(request: number): void {
+    if (request !== 0 && request !== 1) return
+    // 1 = no parity, 1 = 8 bits, 112 = 9600 baud in DEC's speed encoding.
+    this.reply(`\x1b[${request + 2};1;1;112;112;1;0x`)
   }
 
   /**

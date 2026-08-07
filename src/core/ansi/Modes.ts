@@ -35,7 +35,7 @@ export const DecMode = {
   CursorKeys: 1,
   /** DECANM — reset would mean VT52 mode, which VT-AC does not have. */
   Ansi: 2,
-  /** DECCOLM — on a VT100, 132 columns. Here, VT-AC's 80-column mode. */
+  /** DECCOLM — 80/132 on a VT100. VT-AC has no 132, so either state means 80. */
   Columns: 3,
   /** DECSCLM — smooth scroll. Nothing to do on a framebuffer that never pans. */
   SmoothScroll: 4,

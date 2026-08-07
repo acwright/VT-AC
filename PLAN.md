@@ -421,7 +421,7 @@ material they draw on, not the order of work.
 | **5.5** | Modes: DECSET/DECRST, alt screen | §5.3 | **done** |
 | **5.6** | Charsets, tab stops, reports, RIS | §5.3 | **done** |
 | **5.7** | Keyboard and store wiring | §5.4 | **done** |
-| 5.8 | `vttest` conformance run, real software, `VT100-CONFORMANCE.md` | §5.5 | **after Phase 6** |
+| **5.8** | `vttest` conformance run, real software, `VT100-CONFORMANCE.md` | §5.5 | **done, in Phase 12** |
 
 5.1 is the substrate: `src/core/ansi/StateMachine.ts` transcribed from the
 published table, `Dispatch.ts` handling only what a personality switch needs to
@@ -504,13 +504,46 @@ in `vt100` Ctrl means what it means everywhere else — clear the top three bits
 plus the named `@ [ \ ] ^ _ ?` forms. It is one of the places the two
 personalities deliberately part company.
 
-**5.8 is deliberately held until Phase 6 has landed.** The conformance gate is
-worth having only if it runs against the app the release ships — real
-`serialport`, real framing, the real renderer — and Phase 6 is what gives the
-app a port to open. Standing up a temporary harness to run `vttest` against the
-core alone would test a program nobody will use, and would have to be redone
-against the real one afterwards. Everything 5.8 needs is already in place; it
-waits on the plumbing, not on the terminal.
+**5.8 was deliberately held until Phase 6 had landed**, and in the end ran at
+the top of Phase 12, against the packaged app rather than a dev build. The
+conformance gate is worth having only if it runs against the app the release
+ships — real `serialport`, real framing, the real renderer — and Phase 6 is what
+gives the app a port to open. Standing up a temporary harness to run `vttest`
+against the core alone would have tested a program nobody will use.
+
+**It was worth every hour, and the argument for it is the four defects it
+found** — none of which the 523 unit tests could reach, and one of which made
+the whole personality unusable:
+
+- **`CSI ? 3 l` dropped the terminal to 40 columns.** DECCOLM reset is *normal
+  width* on a VT100, not narrow, which is why it opens vt100 terminfo's `rs2`,
+  `tput init` and `vttest`'s own start-up. Mapping it onto VT-AC's 40-column
+  mode meant every properly initialised program drew on half a screen. Both
+  states now select 80: it is the width a VT100 program may assume and the
+  widest VT-AC has, so it answers the request for normal width and the request
+  for 132 alike. This is the release's only change to VT-100 protocol behaviour
+  found after Phase 5 closed.
+- **DECSC and DECRC did not save the character set** — the `SavedCursor` comment
+  said charsets would "join them as 5.6 introduces them", and 5.6 never came
+  back for it.
+- **A cleared screen ignored DECSCNM.** `Screen.clear` fills the framebuffer in
+  one pass instead of dirtying 4,800 cells, which is most of why a full clear
+  costs nothing, and is therefore one of two places the rasterizer's rules must
+  be restated. The light-background screen came out as a staircase.
+- **DECREQTPARM was unimplemented.** A VT100 report, so it is answered rather
+  than declined alongside the VT220 ones.
+
+The harness is `scripts/vttest-run.mjs`, and the thing that makes it more than a
+screenshotter is that it reads the screen back **out of the canvas** as text,
+matching every 8×8 cell against `Font.CHARACTERS`. Deciding whether the cursor
+is in column 40 by looking at a 640×480 capture of an 8×8 ROM is how conformance
+claims get invented. It also types on the *app's* keyboard over the DevTools
+protocol rather than injecting bytes at the far end, which is what makes item
+6's LineFeed/NewLine test a measurement of `keymap.ts` rather than of the script.
+
+Items 1, 2, 3 and 6 pass, and 8 — the VT102 insert/delete set — passes without
+having been part of the gate. `vi`, ncurses and `htop` all run.
+`docs/VT100-CONFORMANCE.md` is the honest list, divergences first.
 
 **What a screenshot caught that 485 tests did not.** `overlayCursor` draws its
 glyph *inverted* — set bits take the background — so the CP437 full block 5.5
@@ -1092,6 +1125,45 @@ installs get the pointer. `private: true` (Phase 0) prevents an accidental publi
    deprecation, and an explicit statement that native-mode behavior is unchanged
    apart from ESC.
 3. Repo description and topics (drop `npm`, add `electron`, `desktop`, `vt100`, `ansi`).
+
+**What this phase actually was.** Two thirds of it was 5.8, which is written up
+above rather than here because it belongs to the personality it tests. The
+documentation then had something true to describe, which is the argument for
+having run the gate before the README rather than after it: three of the
+README's new sections — Terminal Personalities, VT-100 Mode, 80-Column Mode —
+make claims that were not all true when the phase started.
+
+The README came out at roughly twice its length, and every row of §Phase 12's
+table landed. Three things about it worth recording:
+
+- **The protocol documentation was kept whole.** Character Set, Palette,
+  Instruction Set, Text Mode, Graphics Mode, Bell and Bell Frequencies are v1's
+  words, still correct, and edited only where v2 changed the answer — `SET
+  COLUMN`'s operand is now "modulo the column count" rather than "0 to 39", and
+  `0x1B` grew from one row into its own section.
+- **The one deviation is stated three times**, deliberately: in Features by
+  omission, in §Escape extensions where the table is, and in §Migrating from
+  v1.x where someone upgrading will actually be reading. A deviation mentioned
+  once in a 17KB file is a deviation nobody was told about.
+- **The `vtac` name collision is documented as a symptom**, not as a step.
+  Phase 11 found that Homebrew's `bin` precedes `/usr/local/bin`, so a correct
+  v2 install answers `1.3.0` while npm's v1 is still there. "Run
+  `npm uninstall -g vtac-terminal`" is the instruction; "or a correct install
+  looks broken" is why anyone will follow it.
+
+`docs/VT-AC.html` needed no change: Phase 5 settled on mode 7000 and the card
+already said so. The PDF regenerates byte-identically from it, which is the
+check that `docs:card` is wired correctly — so the card in the repo is current
+by construction rather than by assertion.
+
+`examples/ansi.js` is the fourth example and the only one that needs v2. It
+opens with `ESC 0x02 ESC 0x03` rather than assuming how the app was launched,
+which makes it a demonstration of the escape extensions as well as of ANSI. It
+was verified the same way everything else in this phase was — over the loopback,
+into the built app, `scripts/vttest-run.mjs --program ansi` — and that caught a
+UTF-8 middle dot in a source string arriving as two CP437 glyphs, which is the
+same limitation `htop`'s sort arrow runs into and is now a comment at the top of
+the file.
 
 ---
 

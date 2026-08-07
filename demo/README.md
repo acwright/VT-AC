@@ -24,7 +24,7 @@ Prerequisites
 
 1. PlatformIO CLI installed (`pio`) or VS Code + PlatformIO extension.
 2. Arduino Nano connected by USB.
-3. VT-AC installed or built from source.
+3. VT-AC installed — the desktop app, or a source checkout.
 
 Build and upload (PlatformIO CLI)
 ---------------------------------
@@ -46,8 +46,12 @@ Run with VT-AC
 1. Find your serial port on macOS:
 	- `ls /dev/tty.usb* /dev/tty.wchusb*`
 2. Start VT-AC and connect to the same port at `9600` baud:
-	- Global install: `vtac -p /dev/tty.usbserial-XXXX -b 9600`
-	- From source: `node ./dist/index.js -p /dev/tty.usbserial-XXXX -b 9600`
+	- From the app: open Settings, pick the port under SERIAL, and click Connect.
+	- From the command line: `vtac -p /dev/tty.usbserial-XXXX -b 9600`
+	- From a source checkout: `npm run dev`, then connect from Settings.
+
+   `vtac` is installed by the app itself — Settings → COMMAND LINE → Install.
+   It is no longer an npm package; see the README's "Migrating from v1.x".
 
 You should see the VT-AC logo, tagline, and color bar rendered by the Arduino sketch.
 

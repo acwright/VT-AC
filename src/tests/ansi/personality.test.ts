@@ -267,18 +267,17 @@ describe('VT-100 mode output', () => {
   })
 })
 
-describe('sequences 5.1 does not implement yet', () => {
-  // The contract for everything from cursor movement to SGR until the later
-  // stages land: a terminal ignores what it does not understand. It must not
-  // print the sequence as text, and it must not stop reading the stream.
+describe('sequences not implemented yet', () => {
+  // The contract for everything still to come: a terminal ignores what it does
+  // not understand. It must not print the sequence as text, and it must not
+  // stop reading the stream. Each of these moves out of this list as the stage
+  // that owns it lands.
   it.each([
-    ['CUP', '[10;20H'],
-    ['ED', '[2J'],
-    ['SGR', '[1;31m'],
-    ['DECSTBM', '[5;20r'],
-    ['DECTCEM', '[?25l'],
-    ['SCS', '(0'],
-    ['DECSC', '7'],
+    ['SGR', '[1;31m'], // 5.4
+    ['DECTCEM', '[?25l'], // 5.5
+    ['SCS', '(0'], // 5.6
+    ['DECSTR', '[!p'], // 5.6
+    ['secondary DA', '[>c'], // 5.6
     ['OSC', ']0;title\x07'],
     ['DCS', 'P1$q m\x1b\\']
   ])('swallows %s and keeps reading', (_name, sequence) => {

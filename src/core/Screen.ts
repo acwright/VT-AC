@@ -326,8 +326,8 @@ export class Screen {
    * Move rows `top`–`bottom` up by `count`, blanking the rows exposed at the
    * bottom of the region.
    *
-   * The engine behind LF and IND at the bottom margin, `CSI S` (SU), and — with
-   * the cursor row standing in for `top` — DL.
+   * The engine behind LF and IND at the bottom margin and — with the cursor row
+   * standing in for `top` — DL.
    */
   scrollUp(top: number, bottom: number, count: number, fg: number, bg: number): void {
     const first = Math.max(0, top)
@@ -356,8 +356,8 @@ export class Screen {
    * Move rows `top`–`bottom` down by `count`, blanking the rows exposed at the
    * top of the region.
    *
-   * The engine behind RI at the top margin, `CSI T` (SD), and — with the cursor
-   * row standing in for `top` — IL.
+   * The engine behind RI at the top margin and — with the cursor row standing
+   * in for `top` — IL.
    */
   scrollDown(top: number, bottom: number, count: number, fg: number, bg: number): void {
     const first = Math.max(0, top)

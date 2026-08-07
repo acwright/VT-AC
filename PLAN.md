@@ -416,9 +416,9 @@ material they draw on, not the order of work.
 | --- | --- | --- | --- |
 | **5.1** | Personality routing + the ANSI state machine | §5.1, §5.2 | **done** |
 | **5.2** | `Screen` operations ANSI needs: scroll regions, IL/DL/ICH/DCH/ECH | — | **done** |
-| 5.3 | CSI dispatch: cursor, erase, edit, DECSTBM | §5.3 | |
+| **5.3** | CSI dispatch: cursor, erase, edit, DECSTBM, deferred wrap | §5.3 | **done** |
 | 5.4 | SGR and colour, through `XTERM256_TO_RGB332` | §5.3 | |
-| 5.5 | Modes: DECSET/DECRST, deferred last-column wrap, alt screen | §5.3 | |
+| 5.5 | Modes: DECSET/DECRST, alt screen | §5.3 | |
 | 5.6 | Charsets, tab stops, reports, RIS | §5.3 | |
 | 5.7 | Keyboard, settings, control bar, store wiring | §5.4 | |
 | 5.8 | `vttest` conformance run, real software, `VT100-CONFORMANCE.md` | §5.5 | |
@@ -440,6 +440,18 @@ personality that has the concept, which also keeps the alternate screen nothing
 more than a second `Screen`. IL and DL are then *literally* a region scroll
 starting at the cursor row, so the crossing the plan flags as "where off-by-one
 errors hide" has no second implementation to disagree with the first.
+
+5.3 wires those to sequences and puts the VT-100's own state — scroll margins,
+saved cursor, pending wrap — on `Dispatch` rather than on `VTAC`, since native
+mode has no word for any of it. The cursor, colours and bell stay on `VTAC` and
+are shared, so a personality switch never teleports the cursor.
+
+**The deferred last-column wrap moved from 5.5 to here**, and the table above
+says so. It is not really a mode: it is a property of `print` and of every
+cursor movement that clears it, so implementing it later would have meant
+revisiting every method 5.3 adds. DECAWM's *off* switch is still 5.5's, and
+lands as a single branch in `print`. Doing it early also gets the plan's
+number-one risk under test now rather than at the conformance run.
 
 One consequence worth recording: routing on personality makes `ESC 0x04`
 unreachable from `vt100`, so the query's personality byte always reads `00`.

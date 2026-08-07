@@ -1,7 +1,7 @@
 import { CHARACTERS } from './Font'
 import { Screen } from './Screen'
-import { createAnsiParser } from './ansi/Dispatch'
-import type { AnsiParser } from './ansi/StateMachine'
+import { Dispatch } from './ansi/Dispatch'
+import { AnsiParser } from './ansi/StateMachine'
 import type { Personality } from './types'
 
 /** The two geometries VT-AC offers, keyed by column count. */
@@ -35,6 +35,17 @@ export class VTAC {
   readonly screen: Screen = new Screen(VTAC.COLUMNS, VTAC.ROWS)
 
   /**
+   * The VT-100 personality: its state — scroll margins, saved cursor, pending
+   * wrap — and what every ANSI sequence does.
+   *
+   * Deliberately not folded into `VTAC`: native mode has no word for any of it.
+   * What the two personalities *do* share is the cursor, the colours and the
+   * bell, which all stay here, so a personality switch never teleports the
+   * cursor or changes what the screen looks like.
+   */
+  readonly vt100: Dispatch = new Dispatch(this)
+
+  /**
    * The VT-100 parser, and where `parse` sends bytes while the personality is
    * `vt100`.
    *
@@ -43,7 +54,7 @@ export class VTAC {
    * inside the byte stream, so there is no moment where allocating it would be
    * cheaper than having it.
    */
-  readonly ansi: AnsiParser = createAnsiParser(this)
+  readonly ansi: AnsiParser = new AnsiParser(this.vt100)
 
   private bufferView: Buffer<ArrayBuffer> | null = null
   private bufferSource: Uint8Array | null = null
@@ -198,6 +209,10 @@ export class VTAC {
     this.column = 0
     this.row = 0
     this.offset = 0
+
+    // The row count changed under the scroll region, and DECCOLM opens the
+    // margins on real hardware anyway.
+    this.vt100.resetMargins()
   }
 
   /**
@@ -267,6 +282,10 @@ export class VTAC {
     } else {
       this.screen.reset()
     }
+
+    // Last, because the bottom margin is read off the row count and the line
+    // above may just have changed it.
+    this.vt100.reset()
   }
 
   bell = () => {

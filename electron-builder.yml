@@ -6,7 +6,7 @@
 # uses whatever Developer ID Application identity is in the keychain.
 appId: com.acwright.vtac
 productName: VT-AC
-copyright: Copyright © 2026 A.C. Wright
+copyright: Copyright © 2026 A.C. Wright Design
 
 directories:
   buildResources: build

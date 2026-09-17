@@ -42,10 +42,22 @@ const LOOPBACK = {
 /**
  * 115200 rather than VT-AC's own 9600: a vttest screen is up to 4,800
  * characters and the gate is about what gets drawn, not about how long a
- * VT100's line took to paint. 8-N-1 either way, and all four fields, because
+ * VT100's line took to paint. 8-N-1 either way, and all five fields, because
  * `SettingsService.override` replaces `serialConfig` wholesale.
+ *
+ * `rtscts: false` deliberately, against the app's own default: this end of the
+ * loopback is a `serialport` script that never lowers RTS, so there is no
+ * handshake to test, and a cable whose control lines are not crossed would
+ * leave the app unable to send a byte. What is measured here is what gets
+ * drawn.
  */
-const SERIAL = { baudRate: 115200, dataBits: 8, parity: 'none', stopBits: 1 }
+const SERIAL = {
+  baudRate: 115200,
+  dataBits: 8,
+  parity: 'none',
+  stopBits: 1,
+  rtscts: false
+}
 
 /** Terminal geometry, and what vttest is told about it: 60 lines, 80 columns, no 132. */
 const GEOMETRY = { rows: 60, cols: 80 }

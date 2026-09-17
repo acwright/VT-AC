@@ -42,13 +42,24 @@ const LOOPBACK = {
 }
 
 /**
- * VT-AC's framing at a given rate — 8-N-1, and all four fields.
+ * VT-AC's framing at a given rate — 8-N-1, and all five fields.
  *
  * Partial is not an option: `SettingsService.override` replaces
  * `serialConfig` wholesale rather than merging into it, which is why the CLI
  * builds the whole record from `DEFAULT_SERIAL_CONFIG` for any one framing flag.
+ *
+ * `rtscts: false` deliberately, against the app's own default: the other end of
+ * this loopback is a `serialport` script with no handshake of its own, and a
+ * recording that stalled because a control line was not crossed would say
+ * nothing about the terminal.
  */
-const framing = (baudRate) => ({ baudRate, dataBits: 8, parity: 'none', stopBits: 1 })
+const framing = (baudRate) => ({
+  baudRate,
+  dataBits: 8,
+  parity: 'none',
+  stopBits: 1,
+  rtscts: false
+})
 
 const SCENARIOS = {
   /**

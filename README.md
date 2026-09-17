@@ -65,9 +65,9 @@ Download the latest release for your platform from
 
 | Platform | File |
 | --- | --- |
-| macOS (Apple silicon) | `VT-AC-2.0.0-mac-arm64.dmg` — signed and notarized |
-| Windows (x64) | `VT-AC-2.0.0-win-x64.exe` |
-| Linux (x64) | `VT-AC-2.0.0-linux-x86_64.AppImage` or `VT-AC-2.0.0-linux-amd64.deb` |
+| macOS (Apple silicon) | `VT-AC-2.1.0-mac-arm64.dmg` — signed and notarized |
+| Windows (x64) | `VT-AC-2.1.0-win-x64.exe` |
+| Linux (x64) | `VT-AC-2.1.0-linux-x86_64.AppImage` or `VT-AC-2.1.0-linux-amd64.deb` |
 
 Or **use it in your browser** at
 [acwright.github.io/VT-AC](https://acwright.github.io/VT-AC/) — same terminal,

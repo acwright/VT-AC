@@ -123,14 +123,21 @@ function createSerial(): Serial {
    * Both arguments default to the shared state above, so the control bar's link
    * button is `connect()` with nothing to know — and `vtac -p` still
    * gets to name a port explicitly.
+   *
+   * The framing parameter is `framing` and not `settings`: it was the latter
+   * until v2.1.0, where it shadowed the settings *service* above, so the
+   * `lastPort` write below called `set` on a `SerialConfig`. Every connection
+   * that named a port therefore threw a TypeError immediately after opening
+   * successfully — caught here, reported in the panel as a failure, and the
+   * port never remembered for the next launch.
    */
   async function connect(
-    settings: SerialConfig = config.value,
+    framing: SerialConfig = config.value,
     portPath: string | undefined = port.value || undefined
   ): Promise<void> {
     error.value = null
     try {
-      await service.connect(settings, portPath)
+      await service.connect(framing, portPath)
       // Remembered so the picker opens on the device actually in use, and so a
       // relaunch finds the same line. Web has no path to remember — the browser
       // owns port identity.

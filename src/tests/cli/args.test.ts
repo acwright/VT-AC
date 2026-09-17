@@ -63,13 +63,37 @@ describe('serial framing', () => {
     // `vtac -b 19200` is 19200 8-N-1 in v1, not 19200 paired with whatever
     // parity happened to be in the settings file.
     expect(config('-b', '19200').settings).toEqual({
-      serialConfig: { baudRate: 19200, dataBits: 8, parity: 'none', stopBits: 1 }
+      serialConfig: { baudRate: 19200, dataBits: 8, parity: 'none', stopBits: 1, rtscts: true }
     })
   })
 
-  it('takes all four flags together', () => {
-    expect(config('-b', '115200', '-a', 'even', '-d', '7', '-t', '2').settings).toEqual({
-      serialConfig: { baudRate: 115200, dataBits: 7, parity: 'even', stopBits: 2 }
+  it('takes all five flags together', () => {
+    expect(config('-b', '115200', '-a', 'even', '-d', '7', '-t', '2', '-r', 'off').settings).toEqual(
+      {
+        serialConfig: {
+          baudRate: 115200,
+          dataBits: 7,
+          parity: 'even',
+          stopBits: 2,
+          rtscts: false
+        }
+      }
+    )
+  })
+
+  it('opens with RTS/CTS unless the line is told otherwise', () => {
+    // The AC6502 documentation asks for hardware flow control, and the machines
+    // it describes raise RTS when their input buffer fills; a terminal that
+    // needed a flag before it would listen is the one that loses the paste.
+    expect(config('-b', '19200').settings?.serialConfig?.rtscts).toBe(true)
+    expect(config('-r', 'on').settings?.serialConfig?.rtscts).toBe(true)
+    expect(config('--rtscts', 'off').settings?.serialConfig?.rtscts).toBe(false)
+  })
+
+  it('-r alone is a framing flag like any other', () => {
+    // Whole framing from v1's defaults, not `rtscts` bolted onto a saved one.
+    expect(config('-r', 'off').settings).toEqual({
+      serialConfig: { baudRate: 9600, dataBits: 8, parity: 'none', stopBits: 1, rtscts: false }
     })
   })
 
@@ -86,6 +110,7 @@ describe('serial framing', () => {
     expect(() => config('-t', '3')).toThrow('Error: Invalid Stop Bits')
     // v1 cast this one without checking it; the text is in its voice.
     expect(() => config('-a', 'odder')).toThrow('Error: Invalid Parity')
+    expect(() => config('-r', 'yes')).toThrow('Error: Invalid RTS/CTS')
   })
 
   it('refuses a baud rate that is not a number', () => {
@@ -115,7 +140,7 @@ describe('the two new flags', () => {
       serialPort: '/dev/ttyUSB0',
       fullscreen: true,
       settings: {
-        serialConfig: { baudRate: 19200, dataBits: 8, parity: 'none', stopBits: 1 },
+        serialConfig: { baudRate: 19200, dataBits: 8, parity: 'none', stopBits: 1, rtscts: true },
         personality: 'vt100',
         columns: 80
       }

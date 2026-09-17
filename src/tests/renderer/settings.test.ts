@@ -1,5 +1,5 @@
 import { WebSettingsService, WEB_SETTINGS_KEY } from '@/services/settings'
-import { DEFAULT_APP_SETTINGS } from '@shared/types'
+import { DEFAULT_APP_SETTINGS, rtsCtsEnabled } from '@shared/types'
 import type { KeyValueStore } from '@/services/settings'
 
 /**
@@ -63,6 +63,18 @@ describe('WebSettingsService', () => {
     expect(settings.columns).toBe(80)
     expect(settings.personality).toBe(DEFAULT_APP_SETTINGS.personality)
     expect(settings.bellVolume).toBe(DEFAULT_APP_SETTINGS.bellVolume)
+  })
+
+  it('leaves RTS/CTS on for a record stored before the option existed', async () => {
+    // The browser build's version of the same migration question: a
+    // `serialConfig` is merged in whole, so a record from v2.0.0 has no
+    // `rtscts` — and Web Serial must still be opened with
+    // `flowControl: 'hardware'`, which is what `rtsCtsEnabled` answers.
+    const stored = { serialConfig: { baudRate: 9600, dataBits: 8, parity: 'none', stopBits: 1 } }
+    const settings = await new WebSettingsService(fakeStore(JSON.stringify(stored))).get()
+
+    expect(settings.serialConfig.rtscts).toBeUndefined()
+    expect(rtsCtsEnabled(settings.serialConfig)).toBe(true)
   })
 
   it('falls back to the defaults on a corrupt record, and overwrites it', async () => {

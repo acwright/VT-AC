@@ -48,6 +48,7 @@ export function createProgram(): Command {
     .option('-a, --parity <parity>', 'Parity (odd | even | none)', 'none')
     .option('-d, --databits <databits>', 'Data Bits (5 | 6 | 7 | 8)', '8')
     .option('-t, --stopbits <stopbits>', 'Stop Bits (1 | 1.5 | 2)', '1')
+    .option('-r, --rtscts <rtscts>', 'RTS/CTS hardware flow control (on | off)', 'on')
     .option('-f, --fullscreen', 'Enable fullscreen mode', false)
     .option('-s, --scale <scale>', 'Window scale (1 - 6)')
     .option('-l, --load <load>', 'Path to data file to load (e.g. /path/to/data.bin)')
@@ -93,17 +94,27 @@ export function buildBootConfig(
 
   const settings: Partial<AppSettings> = {}
 
-  // Framing is all-or-nothing: any one of the four flags builds a whole
+  // Framing is all-or-nothing: any one of the five flags builds a whole
   // `SerialConfig` from v1's defaults, so `vtac -b 19200` opens 19200 8-N-1
   // exactly as v1 did rather than pairing a new baud rate with whatever parity
   // was left in the settings file. None of them, and the saved framing stands.
-  if (given('baudrate') || given('parity') || given('databits') || given('stopbits')) {
+  // `-r` joins them rather than standing apart: `vtac -r off` is someone
+  // describing the whole line in front of them, and a flow-control flag that
+  // silently kept a saved 19200 would be the odd one out.
+  if (
+    given('baudrate') ||
+    given('parity') ||
+    given('databits') ||
+    given('stopbits') ||
+    given('rtscts')
+  ) {
     settings.serialConfig = {
       ...DEFAULT_SERIAL_CONFIG,
       baudRate: baudRate(text('baudrate')),
       parity: parity(text('parity')),
       dataBits: dataBits(text('databits')),
-      stopBits: stopBits(text('stopbits'))
+      stopBits: stopBits(text('stopbits')),
+      rtscts: rtscts(text('rtscts'))
     }
   }
 
@@ -161,6 +172,16 @@ function stopBits(value: string | undefined): SerialConfig['stopBits'] {
     throw new UsageError('Error: Invalid Stop Bits')
   }
   return bits
+}
+
+/**
+ * `-r on` / `-r off`, in the same shape as the framing flags above: a word, not
+ * a bare switch, so `--rtscts` reads the same as `--parity` and a script can
+ * pass either state without knowing which one the default is.
+ */
+function rtscts(value: string | undefined): boolean {
+  if (value !== 'on' && value !== 'off') throw new UsageError('Error: Invalid RTS/CTS')
+  return value === 'on'
 }
 
 function scale(value: string | undefined): number {

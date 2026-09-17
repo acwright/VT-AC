@@ -1,6 +1,6 @@
 import { SerialPort } from 'serialport'
 import type { BrowserWindow } from 'electron'
-import { IPC } from '../shared/types'
+import { IPC, rtsCtsEnabled } from '../shared/types'
 import type { PortInfo, SerialConfig, SerialStatus } from '../shared/types'
 
 /**
@@ -41,6 +41,12 @@ export class SerialService {
         dataBits: config.dataBits,
         parity: config.parity,
         stopBits: config.stopBits,
+        // Hardware flow control. Left out until v2.1.0, which meant
+        // `serialport`'s default of `false` and a terminal that could not do
+        // RTS/CTS at all — the one thing the AC6502 documentation asks a
+        // terminal for, since the BIOS raises RTS when its input buffer fills
+        // and a long paste is lost without it.
+        rtscts: rtsCtsEnabled(config),
         autoOpen: false
       })
 

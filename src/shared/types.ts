@@ -27,6 +27,20 @@ export interface SerialConfig {
   dataBits: 5 | 6 | 7 | 8
   parity: 'none' | 'odd' | 'even'
   stopBits: 1 | 1.5 | 2
+  /**
+   * RTS/CTS hardware flow control.
+   *
+   * On by default, because a real terminal on a real board does it: the AC6502
+   * BIOS raises RTS when its input buffer fills, and a terminal that watches
+   * CTS is what makes a long paste arrive whole instead of losing the lines
+   * that overran the far end. A device that leaves CTS asserted — which is what
+   * a three-wire cable does — is unaffected by having it on.
+   *
+   * Optional so a settings file written before this option existed still
+   * loads. Absent means *on*: see `rtsCtsEnabled`, which every reader goes
+   * through, and which is the whole of the migration this needed.
+   */
+  rtscts?: boolean
 }
 
 /**
@@ -39,7 +53,21 @@ export const DEFAULT_SERIAL_CONFIG: SerialConfig = {
   baudRate: 9600,
   dataBits: 8,
   parity: 'none',
-  stopBits: 1
+  stopBits: 1,
+  rtscts: true
+}
+
+/**
+ * Whether this config asks for RTS/CTS — the one place the default lives.
+ *
+ * A settings file, a `localStorage` record or a `BootConfig` from an older
+ * build has no `rtscts` in it, and the settings services merge a saved
+ * `serialConfig` in whole rather than field by field, so "absent" is a case
+ * every reader meets. It answers *on*, which is what an owner following the
+ * AC6502 serial documentation expects to find already ticked.
+ */
+export function rtsCtsEnabled(config: SerialConfig): boolean {
+  return config.rtscts ?? true
 }
 
 export type SerialStatus = 'disconnected' | 'connecting' | 'connected' | 'error'

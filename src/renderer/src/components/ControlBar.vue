@@ -18,6 +18,7 @@ import { useSerial } from '@/composables/useSerial'
 import { useBell } from '@/composables/useBell'
 import { useFullscreen } from '@/composables/useFullscreen'
 import { useSettings } from '@/services/settings'
+import { rtsCtsEnabled } from '@shared/types'
 import type { SettingsSection } from '@/components/SettingsPanel.vue'
 
 /**
@@ -71,6 +72,18 @@ const framing = computed(() => {
   const { baudRate, dataBits, parity, stopBits } = serial.config.value
   return `${baudRate} ${dataBits}${parity[0].toUpperCase()}${stopBits}`
 })
+
+/**
+ * The readout's tooltip. Flow control belongs in the words rather than in the
+ * `9600 8N1` itself — nobody writes it there, and it is the setting most worth
+ * being able to check without opening the panel.
+ */
+const framingTitle = computed(
+  () =>
+    `Serial settings — ${framing.value}, ${
+      rtsCtsEnabled(serial.config.value) ? 'RTS/CTS' : 'no flow control'
+    }`
+)
 
 const linkTitle = computed(() => {
   switch (serial.status.value) {
@@ -177,7 +190,7 @@ async function toggleBell(): Promise<void> {
       <LinkSlashIcon v-else class="icon" />
     </button>
 
-    <button class="readout" title="Serial settings" @click="emit('open-settings', 'serial')">
+    <button class="readout" :title="framingTitle" @click="emit('open-settings', 'serial')">
       {{ framing }}
     </button>
 

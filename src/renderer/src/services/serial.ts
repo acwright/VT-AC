@@ -1,3 +1,4 @@
+import { rtsCtsEnabled } from '@shared/types'
 import type { PortInfo, SerialConfig, SerialStatus } from '@shared/types'
 import type { ISerialService } from './types'
 
@@ -13,6 +14,8 @@ interface WebSerialPort {
     dataBits?: number
     stopBits?: number
     parity?: 'none' | 'even' | 'odd'
+    /** Web Serial's name for RTS/CTS. `'hardware'` is what `rtscts: true` is. */
+    flowControl?: 'none' | 'hardware'
   }): Promise<void>
   close(): Promise<void>
   readonly readable: ReadableStream<Uint8Array> | null
@@ -62,7 +65,10 @@ class WebSerialService implements ISerialService {
         dataBits: config.dataBits,
         // Web Serial takes whole stop bits only; 1.5 has no expression here.
         stopBits: config.stopBits === 2 ? 2 : 1,
-        parity: config.parity
+        parity: config.parity,
+        // Web Serial spells RTS/CTS `flowControl`, and offers only the two
+        // values — there is no XON/XOFF here and none is wanted.
+        flowControl: rtsCtsEnabled(config) ? 'hardware' : 'none'
       })
       this.port = selected
       this.emitStatus('connected')

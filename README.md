@@ -50,7 +50,8 @@ Plug in anything with a serial port — an Arduino, a Raspberry Pi, a
 - A bell with configurable duration and a two-octave note table.
 - **Desktop app** for macOS, Windows and Linux, **or run it in your browser**
   with no install at all: **[acwright.github.io/VT-AC](https://acwright.github.io/VT-AC/)**
-- Serial connection with configurable baud rate, parity, data bits and stop bits.
+- Serial connection with configurable baud rate, parity, data bits, stop bits and
+  **RTS/CTS hardware flow control**, on by default.
 - Load binary data files straight into the terminal, from the control bar or the
   command line.
 - A `vtac` command line that launches the app with flags applied — installed by
@@ -96,8 +97,10 @@ The window is the terminal, and the strip along the bottom is the control bar.
 The settings panel slides in from the right:
 
 - **TERMINAL** — personality and column mode, and what each one is.
-- **SERIAL** — port, baud rate, data bits, parity, stop bits. Defaults to
-  **9600 8-N-1**, VT-AC v1's default.
+- **SERIAL** — port, baud rate, data bits, parity, stop bits, flow control.
+  Defaults to **9600 8-N-1** with **RTS/CTS** on — VT-AC v1's framing, and the
+  handshake the hardware wants. Flow control is offered in the browser build
+  too; the framing fields are the desktop app's.
 - **DISPLAY** — window scale 1× to 6×, and fullscreen. Desktop only.
 - **BELL** — mute, volume, and a Test button.
 - **FILES** — the loaded data file, and Reload.
@@ -105,6 +108,22 @@ The settings panel slides in from the right:
 
 Changes here are saved. Anything set by a command-line flag applies to that
 launch only — see [Command line](#command-line).
+
+### Flow control
+
+**RTS/CTS** is hardware flow control, and VT-AC has it on by default.
+
+A device whose input buffer is filling raises RTS to say *stop sending*; with
+flow control on, the terminal sees that on its CTS line and holds the rest of
+the bytes until the device is ready again. That is what makes a long paste
+arrive whole rather than losing the lines that overran the far end — an AC6502
+machine does exactly this, and its own documentation asks you to turn RTS/CTS on
+in your terminal.
+
+It costs nothing against a device that never lowers CTS, so leaving it on is the
+right answer nearly always. Turn it off — Flow Control → None, or `vtac -r off`
+— for a three-wire cable, which carries TX, RX and ground and has no handshake
+lines to watch. With flow control on and CTS unwired, nothing you type is sent.
 
 ## Terminal Personalities
 
@@ -391,6 +410,7 @@ the window *is* the output.
 ```
 vtac -p /dev/ttyUSB0                       # connect on launch
 vtac -p /dev/ttyUSB0 -b 115200 -a none -d 8 -t 1
+vtac -p /dev/ttyUSB0 -r off                # three-wire cable, no handshake
 vtac --mode vt100 --columns 80             # 80-column VT-100 mode
 vtac -l ./examples/characters.bin          # load a data file
 vtac -f -s 4                               # fullscreen, 4× scale
@@ -403,6 +423,7 @@ vtac -f -s 4                               # fullscreen, 4× scale
 | `-a, --parity <parity>` | `odd` \| `even` \| `none` | `none` |
 | `-d, --databits <bits>` | `5` \| `6` \| `7` \| `8` | `8` |
 | `-t, --stopbits <bits>` | `1` \| `1.5` \| `2` | `1` |
+| `-r, --rtscts <state>` | RTS/CTS hardware flow control, `on` \| `off` | `on` |
 | `-m, --mode <mode>` | `native` \| `vt100` | saved setting |
 | `-c, --columns <cols>` | `40` \| `80` | saved setting |
 | `-f, --fullscreen` | Open fullscreen | off |
@@ -428,6 +449,8 @@ terminal and the same renderer, in a browser tab. What differs:
 
 - **Serial is the Web Serial API**, so it needs Chrome or Edge over HTTPS, and a
   click to pick the port. The settings panel says so if your browser lacks it.
+  Flow control comes across (`flowControl: 'hardware'`); the framing is whatever
+  was last saved, since the framing fields are the desktop app's.
 - **Files** come from a file picker rather than a native dialog.
 - **Settings live in `localStorage`**, so two tabs are two independent terminals
   sharing one origin.

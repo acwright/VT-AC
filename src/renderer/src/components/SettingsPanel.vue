@@ -14,7 +14,7 @@ import { useSerial } from '@/composables/useSerial'
 import { useBell } from '@/composables/useBell'
 import { useFullscreen } from '@/composables/useFullscreen'
 import { useSettings } from '@/services/settings'
-import { DEFAULT_APP_SETTINGS, MAX_SCALE, MIN_SCALE } from '@shared/types'
+import { DEFAULT_APP_SETTINGS, MAX_SCALE, MIN_SCALE, rtsCtsEnabled } from '@shared/types'
 import type { CliShimStatus, Columns, Personality, PortInfo } from '@shared/types'
 
 /**
@@ -103,6 +103,21 @@ watch(
   },
   { deep: true }
 )
+
+/**
+ * RTS/CTS, as a value the `<select>` can bind to.
+ *
+ * Through `rtsCtsEnabled` rather than straight at the field, because a settings
+ * file written before v2.1.0 has no `rtscts` in it and the control would then
+ * show neither option as chosen while the port was in fact opening with flow
+ * control on. Writing back makes the absent value explicit.
+ */
+const rtscts = computed({
+  get: () => rtsCtsEnabled(serial.config.value),
+  set: (value: boolean) => {
+    serial.config.value.rtscts = value
+  }
+})
 
 /** Web Serial is Chromium-only and HTTPS-only; silence about that is worse. */
 const webSerialMissing = computed(() => !isElectron.value && !serial.available)
@@ -266,8 +281,17 @@ onMounted(async () => {
               <ArrowPathIcon class="size-4" />
             </button>
           </div>
+        </template>
 
-          <div class="config-grid">
+        <!--
+          The port list and the framing fields are desktop-only — the browser
+          picks the port itself and Web Serial takes the framing from what was
+          saved. Flow control is offered in both builds: Web Serial honours it
+          (`flowControl: 'hardware'`), and a cable with no handshake lines needs
+          a way to say so whichever build is in front of you.
+        -->
+        <div class="config-grid">
+          <template v-if="isElectron">
             <div class="config-item">
               <label class="config-label">Baud Rate</label>
               <input v-model.number="serial.config.value.baudRate" type="number" class="field" />
@@ -297,8 +321,24 @@ onMounted(async () => {
                 <option :value="2">2</option>
               </select>
             </div>
+          </template>
+
+          <div class="config-item config-item-wide">
+            <label class="config-label">Flow Control</label>
+            <select v-model="rtscts" class="field">
+              <option :value="true">RTS/CTS</option>
+              <option :value="false">None</option>
+            </select>
           </div>
-        </template>
+        </div>
+
+        <p class="hint">
+          <strong>RTS/CTS</strong> is hardware flow control, and is on by
+          default. Leave it on for a device that raises RTS when its input
+          buffer fills — an AC6502 machine does — and a long paste arrives whole
+          instead of losing the lines that overran the far end. Turn it off only
+          for a three-wire cable, which has no handshake lines to watch.
+        </p>
 
         <p v-if="webSerialMissing" class="hint">
           This browser has no Web Serial API. Chrome or Edge over HTTPS can open
@@ -648,6 +688,13 @@ onMounted(async () => {
 
 .config-item .field {
   width: 100%;
+}
+
+/* Flow control sits under the four framing fields, across both columns — and
+   is the only item in the grid in the browser build, where framing is not
+   offered. Either way it is a full-width row rather than a lone half one. */
+.config-item-wide {
+  grid-column: 1 / -1;
 }
 
 .config-label {

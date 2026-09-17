@@ -1,7 +1,7 @@
-import { mkdtempSync, existsSync, readFileSync } from 'node:fs'
+import { mkdtempSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DEFAULT_APP_SETTINGS, DEFAULT_SERIAL_CONFIG } from '../../shared/types'
+import { DEFAULT_APP_SETTINGS, DEFAULT_SERIAL_CONFIG, rtsCtsEnabled } from '../../shared/types'
 import { SettingsService } from '../../main/settings'
 
 /**
@@ -28,7 +28,7 @@ const onDisk = (): unknown =>
 describe('SettingsService', () => {
   it('starts at VT-AC v1 defaults — 9600 8-N-1, native, 40 columns', () => {
     expect(new SettingsService().get()).toEqual({
-      serialConfig: { baudRate: 9600, dataBits: 8, parity: 'none', stopBits: 1 },
+      serialConfig: { baudRate: 9600, dataBits: 8, parity: 'none', stopBits: 1, rtscts: true },
       personality: 'native',
       columns: 40,
       scale: 3,
@@ -84,5 +84,32 @@ describe('SettingsService', () => {
       personality: 'native',
       lastPort: '/dev/cu.usbserial-FTDMBHZ7'
     })
+  })
+
+  it('opens with RTS/CTS for a settings file written before the option existed', () => {
+    // A `serialConfig` is merged in whole, not field by field, so a v2.0.0
+    // settings.json leaves `rtscts` absent however new the defaults are. The
+    // port must still open with flow control on: that is what the AC6502
+    // documentation tells an owner they will find, and what stops a long paste
+    // losing lines. `rtsCtsEnabled` is the only place that decision lives.
+    writeFileSync(
+      settingsFile,
+      JSON.stringify({ serialConfig: { baudRate: 19200, dataBits: 8, parity: 'none', stopBits: 1 } })
+    )
+
+    const config = new SettingsService().get().serialConfig
+    expect(config.rtscts).toBeUndefined()
+    expect(rtsCtsEnabled(config)).toBe(true)
+  })
+
+  it('keeps RTS/CTS off once it has actually been turned off', () => {
+    // The other half of "absent means on": an explicit `false` is a choice
+    // about a three-wire cable, and must survive the same merge.
+    writeFileSync(
+      settingsFile,
+      JSON.stringify({ serialConfig: { ...DEFAULT_SERIAL_CONFIG, rtscts: false } })
+    )
+
+    expect(rtsCtsEnabled(new SettingsService().get().serialConfig)).toBe(false)
   })
 })

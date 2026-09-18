@@ -335,7 +335,7 @@ onMounted(async () => {
         <p class="hint">
           <strong>RTS/CTS</strong> is hardware flow control, and is on by
           default. Leave it on for a device that raises RTS when its input
-          buffer fills — an AC6502 machine does — and a long paste arrives whole
+          buffer fills — plenty of devices do — and a long paste arrives whole
           instead of losing the lines that overran the far end. Turn it off only
           for a three-wire cable, which has no handshake lines to watch.
         </p>

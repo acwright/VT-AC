@@ -65,9 +65,9 @@ Download the latest release for your platform from
 
 | Platform | File |
 | --- | --- |
-| macOS (Apple silicon) | `VT-AC-2.1.0-mac-arm64.dmg` — signed and notarized |
-| Windows (x64) | `VT-AC-2.1.0-win-x64.exe` |
-| Linux (x64) | `VT-AC-2.1.0-linux-x86_64.AppImage` or `VT-AC-2.1.0-linux-amd64.deb` |
+| macOS (Apple silicon) | `VT-AC-2.1.1-mac-arm64.dmg` — signed and notarized |
+| Windows (x64) | `VT-AC-2.1.1-win-x64.exe` |
+| Linux (x64) | `VT-AC-2.1.1-linux-x86_64.AppImage` or `VT-AC-2.1.1-linux-amd64.deb` |
 
 Or **use it in your browser** at
 [acwright.github.io/VT-AC](https://acwright.github.io/VT-AC/) — same terminal,
@@ -116,9 +116,10 @@ launch only — see [Command line](#command-line).
 A device whose input buffer is filling raises RTS to say *stop sending*; with
 flow control on, the terminal sees that on its CTS line and holds the rest of
 the bytes until the device is ready again. That is what makes a long paste
-arrive whole rather than losing the lines that overran the far end — an AC6502
-machine does exactly this, and its own documentation asks you to turn RTS/CTS on
-in your terminal.
+arrive whole rather than losing the lines that overran the far end. Plenty of
+devices work this way, especially ones with only a byte or two of receive
+buffer, and their documentation will usually ask you to turn RTS/CTS on in your
+terminal for exactly this reason.
 
 It costs nothing against a device that never lowers CTS, so leaving it on is the
 right answer nearly always. Turn it off — Flow Control → None, or `vtac -r off`
